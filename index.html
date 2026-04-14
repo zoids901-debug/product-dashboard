@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>인크커피 상품기획 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Pretendard','Apple SD Gothic Neo',sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:13px}
+.wrap{max-width:1400px;margin:0 auto;padding:16px}
+
+/* Header */
+.hdr{background:linear-gradient(135deg,#2d3436,#636e72);color:#fff;padding:20px 24px;border-radius:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.hdr h1{font-size:20px;font-weight:800;letter-spacing:-0.5px}
+.hdr .sub{font-size:12px;opacity:.7}
+
+/* Filters */
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.fbtn{padding:7px 16px;border:1.5px solid #ddd;border-radius:20px;background:#fff;cursor:pointer;font-size:12px;font-weight:600;transition:.2s}
+.fbtn:hover{border-color:#636e72}
+.fbtn.active{background:#2d3436;color:#fff;border-color:#2d3436}
+
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.kpi .label{font-size:11px;color:#888;margin-bottom:6px}
+.kpi .val{font-size:22px;font-weight:800;color:#2d3436}
+.kpi .detail{font-size:11px;color:#636e72;margin-top:4px}
+
+/* Cards */
+.card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px}
+.card h2{font-size:15px;font-weight:700;margin-bottom:12px;color:#2d3436;border-bottom:2px solid #f0f2f5;padding-bottom:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:#f8f9fa;padding:8px 10px;text-align:left;font-weight:700;border-bottom:2px solid #eee;position:sticky;top:0}
+td{padding:7px 10px;border-bottom:1px solid #f0f2f5}
+tr:hover td{background:#f8f9fb}
+.r{text-align:right}
+.rank-a{color:#00b894;font-weight:700}
+.rank-b{color:#fdcb6e;font-weight:700}
+.rank-c{color:#e17055;font-weight:700}
+.bar-cell{position:relative}
+.bar-bg{position:absolute;left:0;top:0;height:100%;background:#dfe6e9;opacity:.3;border-radius:3px}
+
+/* Chart containers */
+.chart-box{position:relative;height:300px}
+
+/* Toggle */
+.tog-row{cursor:pointer;user-select:none}
+.tog-row:hover td{background:#eef2fb !important}
+.tog-icon{font-size:10px;margin-right:4px;color:#888}
+.sub-row td:first-child{padding-left:24px;color:#636e72;font-size:11.5px}
+.sub-sub-row td:first-child{padding-left:40px;color:#999;font-size:11px}
+
+/* Store compare bar */
+.store-bar{display:flex;height:28px;border-radius:6px;overflow:hidden;margin-bottom:6px}
+.store-bar div{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;transition:.3s}
+
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:11px}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+/* Loading overlay */
+.loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,.85);display:flex;align-items:center;justify-content:center;z-index:9999;font-size:16px;font-weight:700;color:#2d3436}
+.loading-overlay.hidden{display:none}
+#month-select{cursor:pointer}
+#month-select:focus{outline:none;border-color:#2d3436}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hdr">
+  <div>
+    <h1>인크커피 상품기획 대시보드</h1>
+    <div class="sub" id="period-label">POS 아이템별 판매 데이터 분석</div>
+  </div>
+  <div style="font-size:11px;opacity:.6">인케이코리아 상품기획팀</div>
+</div>
+
+<!-- Filters -->
+<!-- Month Selector -->
+<div class="card" id="month-panel" style="padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  <strong style="font-size:13px">📅 조회 기간</strong>
+  <select id="month-select" style="padding:6px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;font-weight:600;min-width:160px" onchange="loadMonth(this.value)">
+    <option value="">— 월 선택 —</option>
+  </select>
+  <span id="load-status" style="font-size:11px;color:#888"></span>
+</div>
+
+<div class="filters" id="store-filters"></div>
+
+<!-- KPI Summary -->
+<div class="kpi-row" id="kpi-row"></div>
+
+<!-- 대분류 비중 + 매장비교 -->
+<div class="grid2">
+  <div class="card">
+    <h2>대분류별 매출 비중</h2>
+    <div class="chart-box"><canvas id="chart-big"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>매장별 대분류 비중 비교</h2>
+    <div id="store-compare"></div>
+  </div>
+</div>
+
+<!-- 음료 소분류 + 베이커리 중분류 -->
+<div class="grid2">
+  <div class="card">
+    <h2>음료 소분류별 비중</h2>
+    <div class="chart-box"><canvas id="chart-bev"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>베이커리 중분류별 비중</h2>
+    <div class="chart-box"><canvas id="chart-bak"></canvas></div>
+  </div>
+</div>
+
+<!-- ABC Analysis -->
+<div class="card">
+  <h2>상품 ABC 분석</h2>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <div style="display:flex;gap:6px" id="abc-cat-filters"></div>
+    <div style="margin-left:auto;display:flex;gap:6px" id="abc-sort-btns"></div>
+  </div>
+  <div style="display:flex;gap:16px;margin-bottom:6px;font-size:11px">
+    <span class="rank-a">● A등급 (상위 70%)</span>
+    <span class="rank-b">● B등급 (70~90%)</span>
+    <span class="rank-c">● C등급 (하위 10%)</span>
+  </div>
+  <div style="max-height:500px;overflow-y:auto">
+    <table id="tbl-abc"></table>
+  </div>
+</div>
+
+<!-- Menu Engineering Matrix -->
+<div class="card">
+  <h2>메뉴 엔지니어링 매트릭스</h2>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <div style="display:flex;gap:6px" id="mx-cat-filters"></div>
+    <div style="margin-left:auto"><div class="fbtn active" id="mx-excl-btn" onclick="toggleMxExclude()" style="padding:4px 12px;font-size:11px">상위 이상치 제외</div></div>
+  </div>
+  <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;flex-wrap:wrap">
+    <span style="color:#00b894;font-weight:700">● 주력 메뉴 — 고수량·고단가</span>
+    <span style="color:#0984e3;font-weight:700">● 가격인상 검토 — 고수량·저단가</span>
+    <span style="color:#6c5ce7;font-weight:700">● 노출강화 검토 — 저수량·고단가</span>
+    <span style="color:#e17055;font-weight:700">● 퇴출 검토 — 저수량·저단가</span>
+  </div>
+  <div class="grid2">
+    <div style="position:relative;height:400px"><canvas id="chart-matrix"></canvas></div>
+    <div style="max-height:400px;overflow-y:auto">
+      <table id="tbl-matrix"></table>
+    </div>
+  </div>
+</div>
+
+<!-- 대분류 > 중분류 > 소분류 드릴다운 -->
+<div class="card">
+  <h2>카테고리별 상세 (대분류 → 중분류 → 소분류)</h2>
+  <div style="max-height:600px;overflow-y:auto">
+    <table id="tbl-cat"></table>
+  </div>
+</div>
+
+<!-- 매장별 TOP 메뉴 -->
+<div class="card">
+  <h2>매장별 TOP 10 메뉴</h2>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <div style="display:flex;gap:6px" id="top-cat-filters"></div>
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <div class="fbtn active" id="top-excl-btn" onclick="toggleTopExclude()" style="padding:4px 12px;font-size:11px">상위 이상치 제외</div>
+      <div id="top-sort-btns" style="display:flex;gap:6px"></div>
+    </div>
+  </div>
+  <div class="grid3" id="store-tops"></div>
+</div>
+
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+// ============================================================
+// DATA (loaded from JSON)
+// ============================================================
+let RAW = [];
+let DATA_LOADED = false;
+const DATA_BASE_URL = './data/'; // relative path for GitHub Pages
+
+// Available months - will be populated from manifest or manually
+let AVAILABLE_MONTHS = [];
+// State
+// ============================================================
+let selStore = '전체';
+let STORES = ['전체'];
+const BIG_COLORS = {'음료':'#0984e3','베이커리':'#e17055','MD/기타':'#00b894','푸드':'#fdcb6e'};
+const BIG_ORDER = ['음료','베이커리','푸드','MD/기타'];
+let catExpanded = {};
+
+// ABC 필터 상태
+let abcCatBig = '전체';   // 대분류 필터
+let abcCatMid = '전체';   // 중분류 필터
+let abcSort = 'net';      // 'net' or 'qty'
+let abcExcludeOutlier = false; // ABC 상위 이상치 제외 (기본: OFF)
+
+// 매장 TOP 필터 상태
+let topCatBig = '전체';
+let topCatMid = '전체';
+let topSort = 'net';
+let topExcludeOutlier = true; // 상위 이상치 제외
+
+// 매트릭스 필터 상태
+let mxCatBig = '전체';
+let mxExcludeBasic = true; // 기본: 아메리카노+카페라떼 제외
+
+// 매트릭스 색상
+const MX_COLORS = {star:'#00b894',plow:'#0984e3',puzzle:'#6c5ce7',dog:'#e17055'};
+
+// ============================================================
+// Helpers
+// ============================================================
+const M = v => {
+  if(!v) return '0';
+  const a=Math.abs(v), s=v<0?'-':'';
+  if(a>=1e8){const uk=Math.floor(a/1e8),man=Math.floor((a%1e8)/1e4);return man===0?s+uk+'억':s+uk+'억 '+man.toLocaleString()+'만';}
+  if(a>=1e4){return s+Math.floor(a/1e4).toLocaleString()+'만';}
+  return s+Math.floor(a).toLocaleString();
+};
+const P = (a,b) => b?(a/b*100).toFixed(1)+'%':'-';
+const comma = v => (v||0).toLocaleString();
+
+function getData() {
+  if(selStore==='전체') return RAW;
+  return RAW.filter(r=>r.store===selStore);
+}
+
+// ============================================================
+// Filters
+// ============================================================
+function renderFilters() {
+  const el = document.getElementById('store-filters');
+  el.innerHTML = STORES.map(s=>`<div class="fbtn ${s===selStore?'active':''}" onclick="setStore('${s}')">${s}</div>`).join('');
+}
+function setStore(s) { selStore=s; update(); }
+
+// ============================================================
+// KPI
+// ============================================================
+function updateKPI() {
+  const d = getData();
+  const totalNet = d.reduce((s,r)=>s+r.net,0);
+  const totalQty = d.reduce((s,r)=>s+r.qty,0);
+  const items = new Set(d.map(r=>r.item)).size;
+  const avgPrice = totalQty>0 ? Math.floor(totalNet/totalQty) : 0;
+
+  // 대분류별
+  const byBig = {};
+  d.forEach(r=>{ byBig[r.cat_big]=(byBig[r.cat_big]||0)+r.net; });
+  const bevRatio = byBig['음료']?P(byBig['음료'],totalNet):'-';
+  const bakRatio = byBig['베이커리']?P(byBig['베이커리'],totalNet):'-';
+
+  const html = `
+    <div class="kpi"><div class="label">실매출 합계</div><div class="val">${M(totalNet)}</div><div class="detail">${comma(totalNet)}원</div></div>
+    <div class="kpi"><div class="label">총 판매수량</div><div class="val">${comma(totalQty)}건</div><div class="detail">메뉴 ${items}종</div></div>
+    <div class="kpi"><div class="label">평균 객단가(건당)</div><div class="val">${comma(avgPrice)}원</div></div>
+    <div class="kpi"><div class="label">음료 비중</div><div class="val">${bevRatio}</div><div class="detail">${M(byBig['음료']||0)}</div></div>
+    <div class="kpi"><div class="label">베이커리 비중</div><div class="val">${bakRatio}</div><div class="detail">${M(byBig['베이커리']||0)}</div></div>
+  `;
+  document.getElementById('kpi-row').innerHTML=html;
+}
+
+// ============================================================
+// Charts
+// ============================================================
+let chartBig, chartBev, chartBak;
+
+function updateCharts() {
+  const d = getData();
+  const totalNet = d.reduce((s,r)=>s+r.net,0);
+
+  // 대분류 도넛
+  const bigData = {};
+  d.forEach(r=>{ bigData[r.cat_big]=(bigData[r.cat_big]||0)+r.net; });
+  const bigLabels = BIG_ORDER.filter(k=>bigData[k]);
+  const bigVals = bigLabels.map(k=>bigData[k]);
+  const bigColors = bigLabels.map(k=>BIG_COLORS[k]);
+
+  if(chartBig) chartBig.destroy();
+  chartBig = new Chart(document.getElementById('chart-big'),{
+    type:'doughnut',
+    data:{labels:bigLabels,datasets:[{data:bigVals,backgroundColor:bigColors,borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{
+      legend:{position:'bottom',labels:{font:{size:11}}},
+      tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${M(ctx.raw)} (${P(ctx.raw,totalNet)})`}}
+    }}
+  });
+
+  // 음료 소분류
+  const bevData = {};
+  d.filter(r=>r.cat_big==='음료').forEach(r=>{ bevData[r.cat_small]=(bevData[r.cat_small]||0)+r.net; });
+  const bevEntries = Object.entries(bevData).sort((a,b)=>b[1]-a[1]);
+  const bevTotal = bevEntries.reduce((s,e)=>s+e[1],0);
+  const bevColors = ['#0984e3','#00cec9','#6c5ce7','#a29bfe','#fd79a8','#fab1a0','#81ecec','#ffeaa7','#dfe6e9','#b2bec3','#636e72','#2d3436','#e17055','#00b894'];
+
+  if(chartBev) chartBev.destroy();
+  chartBev = new Chart(document.getElementById('chart-bev'),{
+    type:'doughnut',
+    data:{labels:bevEntries.map(e=>e[0]),datasets:[{data:bevEntries.map(e=>e[1]),backgroundColor:bevColors.slice(0,bevEntries.length),borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{
+      legend:{position:'bottom',labels:{font:{size:10}}},
+      tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${M(ctx.raw)} (${P(ctx.raw,bevTotal)})`}}
+    }}
+  });
+
+  // 베이커리 중분류
+  const bakData = {};
+  d.filter(r=>r.cat_big==='베이커리').forEach(r=>{ bakData[r.cat_mid]=(bakData[r.cat_mid]||0)+r.net; });
+  const bakEntries = Object.entries(bakData).sort((a,b)=>b[1]-a[1]);
+  const bakTotal = bakEntries.reduce((s,e)=>s+e[1],0);
+  const bakColors = ['#e17055','#fab1a0','#fdcb6e','#ffeaa7','#dfe6e9','#b2bec3'];
+
+  if(chartBak) chartBak.destroy();
+  chartBak = new Chart(document.getElementById('chart-bak'),{
+    type:'doughnut',
+    data:{labels:bakEntries.map(e=>e[0]),datasets:[{data:bakEntries.map(e=>e[1]),backgroundColor:bakColors.slice(0,bakEntries.length),borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{
+      legend:{position:'bottom',labels:{font:{size:10}}},
+      tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${M(ctx.raw)} (${P(ctx.raw,bakTotal)})`}}
+    }}
+  });
+}
+
+// ============================================================
+// Store Compare
+// ============================================================
+function updateStoreCompare() {
+  const el = document.getElementById('store-compare');
+  let html = '';
+  const stores = ['가산점','광주점','다산점','수원점','하남점'];
+
+  stores.forEach(store=>{
+    const sd = RAW.filter(r=>r.store===store);
+    const total = sd.reduce((s,r)=>s+r.net,0);
+    if(total===0) return;
+    const byBig = {};
+    sd.forEach(r=>{ byBig[r.cat_big]=(byBig[r.cat_big]||0)+r.net; });
+
+    html += `<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;margin-bottom:3px">${store} <span style="color:#888;font-weight:400">${M(total)}</span></div>`;
+    html += `<div class="store-bar">`;
+    BIG_ORDER.forEach(cat=>{
+      const v = byBig[cat]||0;
+      const pct = v/total*100;
+      if(pct<1) return;
+      html += `<div style="width:${pct}%;background:${BIG_COLORS[cat]}" title="${cat} ${P(v,total)}">${pct>8?P(v,total):''}</div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  html += `<div class="legend">`;
+  BIG_ORDER.forEach(cat=>{
+    html += `<span><i style="background:${BIG_COLORS[cat]}"></i>${cat}</span>`;
+  });
+  html += `</div>`;
+
+  el.innerHTML = html;
+}
+
+// ============================================================
+// ABC 필터 헬퍼
+// ============================================================
+function getAvailableMids(data, bigFilter) {
+  const mids = new Set();
+  data.forEach(r=>{ if(bigFilter==='전체'||r.cat_big===bigFilter) mids.add(r.cat_mid); });
+  return ['전체',...[...mids].sort()];
+}
+
+function renderFilterBtns(containerId, options, selected, onClickFn) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = options.map(o=>`<div class="fbtn${o===selected?' active':''}" onclick="${onClickFn}('${o}')" style="padding:4px 12px;font-size:11px">${o}</div>`).join('');
+}
+
+function setAbcBig(v) { abcCatBig=v; abcCatMid='전체'; updateABC(); }
+function setAbcMid(v) { abcCatMid=v; updateABC(); }
+function setAbcSort(v) { abcSort=v; updateABC(); }
+function toggleAbcExclude() { abcExcludeOutlier=!abcExcludeOutlier; updateABC(); }
+function setTopBig(v) { topCatBig=v; topCatMid='전체'; updateStoreTops(); }
+function setTopMid(v) { topCatMid=v; updateStoreTops(); }
+function setTopSort(v) { topSort=v; updateStoreTops(); }
+function toggleTopExclude() { topExcludeOutlier=!topExcludeOutlier; updateStoreTops(); }
+
+// ============================================================
+// ABC Table
+// ============================================================
+function updateABC() {
+  const d = getData();
+
+  // 대분류 필터 버튼
+  const bigOpts = ['전체',...BIG_ORDER.filter(b=>d.some(r=>r.cat_big===b))];
+  renderFilterBtns('abc-cat-filters', bigOpts, abcCatBig, 'setAbcBig');
+
+  // 대분류 선택 시 중분류 필터
+  const midOpts = getAvailableMids(d, abcCatBig);
+  if(abcCatBig!=='전체' && midOpts.length>2) {
+    const el = document.getElementById('abc-cat-filters');
+    el.innerHTML += '<span style="color:#ccc;margin:0 4px">|</span>';
+    el.innerHTML += midOpts.map(o=>`<div class="fbtn${o===abcCatMid?' active':''}" onclick="setAbcMid('${o}')" style="padding:4px 12px;font-size:11px">${o}</div>`).join('');
+  }
+
+  // 정렬 버튼
+  document.getElementById('abc-sort-btns').innerHTML = `
+    <div class="fbtn${abcSort==='net'?' active':''}" onclick="setAbcSort('net')" style="padding:4px 12px;font-size:11px">매출 기준</div>
+    <div class="fbtn${abcSort==='qty'?' active':''}" onclick="setAbcSort('qty')" style="padding:4px 12px;font-size:11px">수량 기준</div>
+  `;
+
+  // 필터 적용
+  let fd = d;
+  if(abcCatBig!=='전체') fd = fd.filter(r=>r.cat_big===abcCatBig);
+  if(abcCatMid!=='전체') fd = fd.filter(r=>r.cat_mid===abcCatMid);
+
+  const totalNet = fd.reduce((s,r)=>s+r.net,0);
+  const totalQty = fd.reduce((s,r)=>s+r.qty,0);
+
+  // 아이템별 집계
+  const items = {};
+  fd.forEach(r=>{
+    if(!items[r.item]) items[r.item]={item:r.item,cat_big:r.cat_big,cat_mid:r.cat_mid,qty:0,net:0};
+    items[r.item].qty+=r.qty;
+    items[r.item].net+=r.net;
+  });
+
+  const sortKey = abcSort;
+  const totalBase = sortKey==='net'?totalNet:totalQty;
+  const sorted = Object.values(items).filter(i=>i[sortKey]>0).sort((a,b)=>b[sortKey]-a[sortKey]);
+  let cum = 0;
+  sorted.forEach(i=>{
+    i.pct = totalBase>0 ? i[sortKey]/totalBase*100 : 0;
+    cum += i.pct;
+    i.cum = cum;
+    i.rank = cum<=70?'A':cum<=90?'B':'C';
+  });
+
+  const sortLabel = sortKey==='net'?'실매출':'수량';
+  let h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th></tr></thead><tbody>`;
+  sorted.forEach((i,idx)=>{
+    const rc = i.rank==='A'?'rank-a':i.rank==='B'?'rank-b':'rank-c';
+    h += `<tr>
+      <td>${idx+1}</td><td>${i.item}</td><td>${i.cat_big}</td><td>${i.cat_mid}</td>
+      <td class="r">${comma(i.qty)}</td><td class="r">${M(i.net)}</td>
+      <td class="r">${i.pct.toFixed(1)}%</td><td class="r">${i.cum.toFixed(1)}%</td>
+      <td class="${rc}">${i.rank}</td>
+    </tr>`;
+  });
+
+  h += '</tbody>';
+  document.getElementById('tbl-abc').innerHTML=h;
+}
+
+// ============================================================
+// Category Drilldown
+// ============================================================
+function toggleCat(key) {
+  catExpanded[key]=!catExpanded[key];
+  updateCatTable();
+}
+
+function updateCatTable() {
+  const d = getData();
+  const totalNet = d.reduce((s,r)=>s+r.net,0);
+
+  // 3단계 집계
+  const tree = {};
+  d.forEach(r=>{
+    const b=r.cat_big, m=r.cat_mid, s=r.cat_small;
+    if(!tree[b]) tree[b]={net:0,qty:0,mid:{}};
+    tree[b].net+=r.net; tree[b].qty+=r.qty;
+    if(!tree[b].mid[m]) tree[b].mid[m]={net:0,qty:0,small:{}};
+    tree[b].mid[m].net+=r.net; tree[b].mid[m].qty+=r.qty;
+    if(!tree[b].mid[m].small[s]) tree[b].mid[m].small[s]={net:0,qty:0};
+    tree[b].mid[m].small[s].net+=r.net; tree[b].mid[m].small[s].qty+=r.qty;
+  });
+
+  let h = '<thead><tr><th>카테고리</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중</th></tr></thead><tbody>';
+
+  BIG_ORDER.forEach(big=>{
+    const bd = tree[big]; if(!bd) return;
+    const bOpen = catExpanded[big];
+    h += `<tr class="tog-row" onclick="toggleCat('${big}')"><td><span class="tog-icon">${bOpen?'▼':'▶'}</span><strong>${big}</strong></td><td class="r">${comma(bd.qty)}</td><td class="r">${M(bd.net)}</td><td class="r">${P(bd.net,totalNet)}</td></tr>`;
+
+    if(bOpen) {
+      const mids = Object.entries(bd.mid).sort((a,b)=>b[1].net-a[1].net);
+      mids.forEach(([mid,md])=>{
+        const mKey = big+'|'+mid;
+        const mOpen = catExpanded[mKey];
+        const smalls = Object.entries(md.small);
+        const hasDetail = smalls.length>1;
+
+        if(hasDetail) {
+          h += `<tr class="sub-row tog-row" onclick="event.stopPropagation();toggleCat('${mKey}')"><td><span class="tog-icon">${mOpen?'▼':'▶'}</span>${mid}</td><td class="r">${comma(md.qty)}</td><td class="r">${M(md.net)}</td><td class="r">${P(md.net,totalNet)}</td></tr>`;
+        } else {
+          h += `<tr class="sub-row"><td>&nbsp;&nbsp;${mid}</td><td class="r">${comma(md.qty)}</td><td class="r">${M(md.net)}</td><td class="r">${P(md.net,totalNet)}</td></tr>`;
+        }
+
+        if(hasDetail && mOpen) {
+          smalls.sort((a,b)=>b[1].net-a[1].net).forEach(([small,sd])=>{
+            h += `<tr class="sub-sub-row"><td>${small}</td><td class="r">${comma(sd.qty)}</td><td class="r">${M(sd.net)}</td><td class="r">${P(sd.net,totalNet)}</td></tr>`;
+          });
+        }
+      });
+    }
+  });
+
+  h += '</tbody>';
+  document.getElementById('tbl-cat').innerHTML=h;
+}
+
+// ============================================================
+// Store TOP 10
+// ============================================================
+function updateStoreTops() {
+  const el = document.getElementById('store-tops');
+  const stores = selStore==='전체' ? ['가산점','광주점','다산점','수원점','하남점','운정점'] : [selStore];
+
+  // 대분류 필터 버튼
+  const bigOpts = ['전체',...BIG_ORDER.filter(b=>RAW.some(r=>r.cat_big===b))];
+  renderFilterBtns('top-cat-filters', bigOpts, topCatBig, 'setTopBig');
+
+  const midOpts = getAvailableMids(RAW, topCatBig);
+  if(topCatBig!=='전체' && midOpts.length>2) {
+    const tc = document.getElementById('top-cat-filters');
+    tc.innerHTML += '<span style="color:#ccc;margin:0 4px">|</span>';
+    tc.innerHTML += midOpts.map(o=>`<div class="fbtn${o===topCatMid?' active':''}" onclick="setTopMid('${o}')" style="padding:4px 12px;font-size:11px">${o}</div>`).join('');
+  }
+
+  // 이상치 제외 버튼 상태
+  const topExBtn = document.getElementById('top-excl-btn');
+  if(topExBtn) topExBtn.className = 'fbtn' + (topExcludeOutlier?' active':'');
+
+  // 정렬 버튼
+  document.getElementById('top-sort-btns').innerHTML = `
+    <div class="fbtn${topSort==='net'?' active':''}" onclick="setTopSort('net')" style="padding:4px 12px;font-size:11px">매출 기준</div>
+    <div class="fbtn${topSort==='qty'?' active':''}" onclick="setTopSort('qty')" style="padding:4px 12px;font-size:11px">수량 기준</div>
+  `;
+
+  let html = '';
+  stores.forEach(store=>{
+    let sd = RAW.filter(r=>r.store===store);
+    if(topCatBig!=='전체') sd = sd.filter(r=>r.cat_big===topCatBig);
+    if(topCatMid!=='전체') sd = sd.filter(r=>r.cat_mid===topCatMid);
+
+    // 아이템별 집계
+    const items = {};
+    sd.forEach(r=>{
+      if(!items[r.item]) items[r.item]={item:r.item,cat_big:r.cat_big,qty:0,net:0};
+      items[r.item].qty+=r.qty; items[r.item].net+=r.net;
+    });
+    let itemList = Object.values(items).filter(i=>i.qty>0||i.net>0);
+    itemList.forEach(i=>{ i.avg = i.qty>0 ? Math.floor(i.net/i.qty) : 0; });
+
+    // 이상치 감지 및 제외
+    let excludedNames = new Set();
+    if(topExcludeOutlier) {
+      excludedNames = detectOutliers(itemList);
+      itemList = itemList.filter(i => !excludedNames.has(i.item));
+    }
+
+    const sk = topSort;
+    const top = itemList.sort((a,b)=>b[sk]-a[sk]).slice(0,10);
+
+    html += `<div><div style="font-size:13px;font-weight:700;margin-bottom:8px">${store}`;
+    if(excludedNames.size>0) html += ` <span style="font-size:10px;font-weight:400;color:#b2bec3">(${excludedNames.size}개 제외)</span>`;
+    html += `</div>`;
+    html += `<table><thead><tr><th>#</th><th>메뉴</th><th class="r">수량</th><th class="r">매출</th></tr></thead><tbody>`;
+    top.forEach((i,idx)=>{
+      html += `<tr><td>${idx+1}</td><td><span style="color:${BIG_COLORS[i.cat_big]||'#888'};font-size:10px">●</span> ${i.item}</td><td class="r">${comma(i.qty)}</td><td class="r">${M(i.net)}</td></tr>`;
+    });
+    if(top.length===0) html += `<tr><td colspan="4" style="color:#aaa;text-align:center">데이터 없음</td></tr>`;
+    html += `</tbody></table></div>`;
+  });
+
+  // 이상치 버튼에 전체 제외 개수 표시
+  if(topExBtn) {
+    const allExcluded = new Set();
+    stores.forEach(store=>{
+      let sd = RAW.filter(r=>r.store===store);
+      if(topCatBig!=='전체') sd = sd.filter(r=>r.cat_big===topCatBig);
+      if(topCatMid!=='전체') sd = sd.filter(r=>r.cat_mid===topCatMid);
+      const it = {};
+      sd.forEach(r=>{ if(!it[r.item]) it[r.item]={item:r.item,qty:0,net:0}; it[r.item].qty+=r.qty; it[r.item].net+=r.net; });
+      const il = Object.values(it).filter(i=>i.qty>0||i.net>0);
+      il.forEach(i=>{ i.avg = i.qty>0?Math.floor(i.net/i.qty):0; });
+      detectOutliers(il).forEach(n=>allExcluded.add(n));
+    });
+    topExBtn.textContent = allExcluded.size > 0 ? `상위 이상치 제외 (${allExcluded.size}개)` : '상위 이상치 제외';
+  }
+
+  el.innerHTML=html;
+}
+
+// ============================================================
+// Menu Engineering Matrix
+// ============================================================
+let chartMatrix = null;
+
+function setMxBig(v) { mxCatBig=v; updateMatrix(); }
+function toggleMxExclude() { mxExcludeBasic=!mxExcludeBasic; updateMatrix(); }
+
+// IQR 기반 이상치 감지: 수량 또는 건당매출 기준으로 상위 이상치 자동 탐지
+function detectOutliers(itemList) {
+  if(itemList.length < 5) return new Set();
+  const outlierNames = new Set();
+
+  // 수량 기준 이상치
+  const qtyArr = itemList.map(i=>i.qty).sort((a,b)=>a-b);
+  const q1Qty = qtyArr[Math.floor(qtyArr.length*0.25)];
+  const q3Qty = qtyArr[Math.floor(qtyArr.length*0.75)];
+  const iqrQty = q3Qty - q1Qty;
+  const upperQty = q3Qty + iqrQty * 2.5; // 2.5배 IQR → 극단적 이상치만
+
+  // 건당매출 기준 이상치
+  const avgArr = itemList.map(i=>i.avg).sort((a,b)=>a-b);
+  const q1Avg = avgArr[Math.floor(avgArr.length*0.25)];
+  const q3Avg = avgArr[Math.floor(avgArr.length*0.75)];
+  const iqrAvg = q3Avg - q1Avg;
+  const upperAvg = q3Avg + iqrAvg * 2.5;
+
+  itemList.forEach(i=>{
+    // 수량이 극단적으로 높거나, 건당매출이 극단적으로 높은 경우
+    if(i.qty > upperQty || i.avg > upperAvg) {
+      outlierNames.add(i.item);
+    }
+  });
+
+  // 추가: 수량이 2위 대비 3배 이상 차이나는 1위도 이상치로 간주
+  const byQty = [...itemList].sort((a,b)=>b.qty-a.qty);
+  if(byQty.length>=2 && byQty[0].qty >= byQty[1].qty*3) {
+    outlierNames.add(byQty[0].item);
+  }
+  const byAvg = [...itemList].sort((a,b)=>b.avg-a.avg);
+  if(byAvg.length>=2 && byAvg[0].avg >= byAvg[1].avg*3) {
+    outlierNames.add(byAvg[0].item);
+  }
+
+  return outlierNames;
+}
+
+function updateMatrix() {
+  const d = getData();
+
+  // 대분류 필터 버튼
+  const bigOpts = ['전체',...BIG_ORDER.filter(b=>d.some(r=>r.cat_big===b))];
+  renderFilterBtns('mx-cat-filters', bigOpts, mxCatBig, 'setMxBig');
+
+  // 제외 버튼 상태 (이상치 개수는 아래에서 업데이트)
+  const exBtn = document.getElementById('mx-excl-btn');
+  if(exBtn) { exBtn.className = 'fbtn' + (mxExcludeBasic?' active':''); }
+
+  // 필터 적용
+  let fd = d;
+  if(mxCatBig!=='전체') fd = fd.filter(r=>r.cat_big===mxCatBig);
+
+  // 먼저 아이템별 집계 (이상치 감지를 위해)
+  const itemsAll = {};
+  fd.forEach(r=>{
+    if(!itemsAll[r.item]) itemsAll[r.item]={item:r.item,cat_big:r.cat_big,cat_mid:r.cat_mid,qty:0,net:0};
+    itemsAll[r.item].qty+=r.qty;
+    itemsAll[r.item].net+=r.net;
+  });
+  const allList = Object.values(itemsAll).filter(i=>i.qty>0&&i.net>0);
+  allList.forEach(i=>{ i.avg = Math.floor(i.net/i.qty); });
+
+  // 이상치 자동 감지
+  const outlierSet = detectOutliers(allList);
+
+  // 제외 메뉴 집계 (노티용)
+  let excludedItems = {};
+  if(mxExcludeBasic && outlierSet.size > 0) {
+    allList.forEach(i=>{
+      if(outlierSet.has(i.item)) {
+        excludedItems[i.item] = {qty:i.qty, net:i.net, avg:i.avg, reason: i.qty > i.avg ? '수량 이상치' : '단가 이상치'};
+      }
+    });
+  }
+
+  // 버튼 텍스트에 이상치 개수 표시
+  if(exBtn) {
+    const cnt = outlierSet.size;
+    exBtn.textContent = cnt > 0 ? `상위 이상치 제외 (${cnt}개)` : '상위 이상치 제외';
+  }
+
+  // 이상치 제외 여부에 따라 리스트 결정
+  let list;
+  if(mxExcludeBasic && outlierSet.size > 0) {
+    list = allList.filter(i => !outlierSet.has(i.item));
+  } else {
+    list = allList;
+  }
+
+  if(list.length===0) {
+    if(chartMatrix) chartMatrix.destroy();
+    document.getElementById('tbl-matrix').innerHTML='<tr><td>데이터 없음</td></tr>';
+    return;
+  }
+
+  // 중앙값 계산 (평균 대비 중앙값이 더 안정적)
+  const medQty = list.map(i=>i.qty).sort((a,b)=>a-b)[Math.floor(list.length/2)];
+  const medAvg = list.map(i=>i.avg).sort((a,b)=>a-b)[Math.floor(list.length/2)];
+
+  // 사분면 분류
+  list.forEach(i=>{
+    if(i.qty>=medQty && i.avg>=medAvg) { i.quad='star'; i.quadLabel='주력 메뉴'; }
+    else if(i.qty>=medQty && i.avg<medAvg) { i.quad='plow'; i.quadLabel='가격인상 검토'; }
+    else if(i.qty<medQty && i.avg>=medAvg) { i.quad='puzzle'; i.quadLabel='노출강화 검토'; }
+    else { i.quad='dog'; i.quadLabel='퇴출 검토'; }
+  });
+
+  // 차트 데이터
+  const datasets = [
+    {label:'주력 메뉴',data:[],backgroundColor:MX_COLORS.star+'99',borderColor:MX_COLORS.star,borderWidth:1},
+    {label:'가격인상 검토',data:[],backgroundColor:MX_COLORS.plow+'99',borderColor:MX_COLORS.plow,borderWidth:1},
+    {label:'노출강화 검토',data:[],backgroundColor:MX_COLORS.puzzle+'99',borderColor:MX_COLORS.puzzle,borderWidth:1},
+    {label:'퇴출 검토',data:[],backgroundColor:MX_COLORS.dog+'99',borderColor:MX_COLORS.dog,borderWidth:1},
+  ];
+  const quadMap = {star:0,plow:1,puzzle:2,dog:3};
+  const itemLabels = [[],[],[],[]];
+
+  list.forEach(i=>{
+    const idx = quadMap[i.quad];
+    datasets[idx].data.push({x:i.qty, y:i.avg, r:Math.max(4,Math.min(20,Math.sqrt(i.net/100000)))});
+    itemLabels[idx].push(i.item);
+  });
+
+  if(chartMatrix) chartMatrix.destroy();
+  chartMatrix = new Chart(document.getElementById('chart-matrix'),{
+    type:'bubble',
+    data:{datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        x:{title:{display:true,text:'판매수량',font:{size:11}},grid:{color:'#f0f2f5'}},
+        y:{title:{display:true,text:'건당 매출(원)',font:{size:11}},grid:{color:'#f0f2f5'},
+          ticks:{callback:v=>v>=10000?Math.floor(v/10000)+'만':comma(v)}}
+      },
+      plugins:{
+        legend:{position:'bottom',labels:{font:{size:10}}},
+        tooltip:{callbacks:{
+          label:function(ctx){
+            const idx = ctx.dataIndex;
+            const ds = ctx.datasetIndex;
+            const name = itemLabels[ds][idx];
+            return `${name}: ${comma(ctx.raw.x)}건 × ${comma(ctx.raw.y)}원`;
+          }
+        }},
+        annotation: undefined
+      }
+    }
+  });
+
+  // 테이블
+  const sorted = [...list].sort((a,b)=>b.net-a.net);
+  const quadOrder = {star:0,puzzle:1,plow:2,dog:3};
+  const bySeg = [...list].sort((a,b)=>quadOrder[a.quad]-quadOrder[b.quad]||b.net-a.net);
+
+  let h = '<thead><tr><th>구분</th><th>상품명</th><th class="r">수량</th><th class="r">건당매출</th><th class="r">총매출</th></tr></thead><tbody>';
+  bySeg.forEach(i=>{
+    const c = MX_COLORS[i.quad];
+    h += `<tr><td style="color:${c};font-weight:700;font-size:11px">${i.quadLabel}</td><td>${i.item}</td><td class="r">${comma(i.qty)}</td><td class="r">${comma(i.avg)}원</td><td class="r">${M(i.net)}</td></tr>`;
+  });
+
+  // 사분면 요약
+  const qSummary = {};
+  list.forEach(i=>{
+    if(!qSummary[i.quad]) qSummary[i.quad]={cnt:0,net:0};
+    qSummary[i.quad].cnt++;
+    qSummary[i.quad].net+=i.net;
+  });
+  const totalNet = list.reduce((s,i)=>s+i.net,0);
+  h += '<tr><td colspan="5" style="border-top:2px solid #ddd;padding-top:8px;font-size:11px;color:#888">';
+  ['star','plow','puzzle','dog'].forEach(q=>{
+    const s = qSummary[q];
+    const ql = {star:'주력 메뉴',plow:'가격인상 검토',puzzle:'노출강화 검토',dog:'퇴출 검토'};
+    if(s) h += `<span style="color:${MX_COLORS[q]};margin-right:12px">${ql[q]} ${s.cnt}개 (${P(s.net,totalNet)})</span>`;
+  });
+  h += '</td></tr>';
+
+  // 제외 메뉴 노티
+  if(mxExcludeBasic && Object.keys(excludedItems).length>0) {
+    const exList = Object.entries(excludedItems).sort((a,b)=>b[1].qty-a[1].qty);
+    const exTotal = exList.reduce((s,e)=>s+e[1].net,0);
+    h += `<tr><td colspan="5" style="padding-top:10px;font-size:11px;color:#b2bec3;border-top:1px dashed #ddd">`;
+    h += `<strong>상위 이상치 제외 (${exList.length}개):</strong> `;
+    h += exList.map(([name,v])=>`${name} (${comma(v.qty)}건, ${comma(v.avg)}원/건, ${M(v.net)})`).join(' · ');
+    h += ` — 합계 ${M(exTotal)}`;
+    h += `</td></tr>`;
+  }
+
+  h += '</tbody>';
+  document.getElementById('tbl-matrix').innerHTML=h;
+}
+
+// ============================================================
+// Update All
+// ============================================================
+function update() {
+  renderFilters();
+  updateKPI();
+  updateCharts();
+  updateStoreCompare();
+  updateMatrix();
+  updateABC();
+  updateCatTable();
+  updateStoreTops();
+}
+
+update();
+
+// ============================================================
+// Data Loading
+// ============================================================
+async function loadManifest() {
+  try {
+    const res = await fetch(DATA_BASE_URL + 'manifest.json');
+    if (res.ok) {
+      const manifest = await res.json();
+      AVAILABLE_MONTHS = manifest.months || [];
+    }
+  } catch(e) {
+    // manifest not available, try common patterns
+    console.log('No manifest found, using fallback');
+  }
+  
+  // Populate month selector
+  const sel = document.getElementById('month-select');
+  if (AVAILABLE_MONTHS.length > 0) {
+    AVAILABLE_MONTHS.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.file;
+      opt.textContent = m.label;
+      sel.appendChild(opt);
+    });
+    // Auto-load the latest month
+    const latest = AVAILABLE_MONTHS[AVAILABLE_MONTHS.length - 1];
+    sel.value = latest.file;
+    loadMonth(latest.file);
+  } else {
+    document.getElementById('load-status').textContent = '데이터 파일이 없습니다. 빌더에서 업로드해주세요.';
+  }
+}
+
+async function loadMonth(filename) {
+  if (!filename) return;
+  
+  // Show loading
+  const overlay = document.createElement('div');
+  overlay.className = 'loading-overlay';
+  overlay.id = 'loading-overlay';
+  overlay.textContent = '데이터 로딩 중...';
+  document.body.appendChild(overlay);
+  
+  const status = document.getElementById('load-status');
+  status.textContent = '로딩 중...';
+  
+  try {
+    const res = await fetch(DATA_BASE_URL + filename);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    
+    // Set global data
+    RAW = data.items;
+    STORES = ['전체', ...data.stores];
+    selStore = '전체';
+    DATA_LOADED = true;
+    
+    // Update period label
+    document.getElementById('period-label').textContent = 
+      'POS 아이템별 판매 데이터 분석 · ' + data.label;
+    document.title = '인크커피 상품기획 대시보드 — ' + data.label;
+    
+    status.textContent = `✓ ${data.label} (${RAW.length.toLocaleString()}건)`;
+    status.style.color = '#00b894';
+    
+    // Render everything
+    update();
+    
+  } catch(e) {
+    status.textContent = '❌ 로드 실패: ' + e.message;
+    status.style.color = '#e17055';
+    console.error('Data load error:', e);
+  } finally {
+    const ov = document.getElementById('loading-overlay');
+    if (ov) ov.remove();
+  }
+}
+
+// Initialize
+loadManifest();
+</script>
+</body>
+</html>
