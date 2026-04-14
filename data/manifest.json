@@ -1,6 +1,11 @@
 {
   "months": [
     {
+      "file": "2601.json",
+      "label": "2026년 1월",
+      "period": "2026-01"
+    },
+    {
       "file": "2602.json",
       "label": "2026년 2월",
       "period": "2026-02"
