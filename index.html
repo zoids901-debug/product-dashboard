@@ -143,7 +143,10 @@ tr:hover td{background:#f8f9fb}
   <h2>메뉴 엔지니어링 매트릭스</h2>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <div style="display:flex;gap:6px" id="mx-cat-filters"></div>
-    <div style="margin-left:auto"><div class="fbtn active" id="mx-excl-btn" onclick="toggleMxExclude()" style="padding:4px 12px;font-size:11px">상위 이상치 제외</div></div>
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <div id="mx-sort-btns" style="display:flex;gap:4px"></div>
+      <div class="fbtn active" id="mx-excl-btn" onclick="toggleMxExclude()" style="padding:4px 12px;font-size:11px">상위 이상치 제외</div>
+    </div>
   </div>
   <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;flex-wrap:wrap">
     <span style="color:#00b894;font-weight:700">● 주력 메뉴 — 고수량·고단가</span>
@@ -151,6 +154,7 @@ tr:hover td{background:#f8f9fb}
     <span style="color:#6c5ce7;font-weight:700">● 노출강화 검토 — 저수량·고단가</span>
     <span style="color:#e17055;font-weight:700">● 퇴출 검토 — 저수량·저단가</span>
   </div>
+  <div id="mx-excl-panel" style="margin-bottom:8px"></div>
   <div class="grid2">
     <div style="position:relative;height:400px"><canvas id="chart-matrix"></canvas></div>
     <div style="max-height:400px;overflow-y:auto">
@@ -217,7 +221,9 @@ let topExcludeOutlier = true; // 상위 이상치 제외
 
 // 매트릭스 필터 상태
 let mxCatBig = '전체';
-let mxExcludeBasic = true; // 기본: 아메리카노+카페라떼 제외
+let mxExcludeBasic = true;       // 마스터 이상치 제외 토글
+let mxExcludeOverrides = new Set(); // 강제 포함 항목 (이상치여도 표시)
+let mxTableSort = 'quad';        // 'quad' | 'qty' | 'net'
 
 // 매트릭스 색상
 const MX_COLORS = {star:'#00b894',plow:'#0984e3',puzzle:'#6c5ce7',dog:'#e17055'};
@@ -607,8 +613,14 @@ function updateStoreTops() {
 // ============================================================
 let chartMatrix = null;
 
-function setMxBig(v) { mxCatBig=v; updateMatrix(); }
-function toggleMxExclude() { mxExcludeBasic=!mxExcludeBasic; updateMatrix(); }
+function setMxBig(v) { mxCatBig=v; mxExcludeOverrides=new Set(); updateMatrix(); }
+function setMxSort(v) { mxTableSort=v; updateMatrix(); }
+function toggleMxExclude() { mxExcludeBasic=!mxExcludeBasic; mxExcludeOverrides=new Set(); updateMatrix(); }
+function toggleMxExcludeItem(name) {
+  if(mxExcludeOverrides.has(name)) mxExcludeOverrides.delete(name);
+  else mxExcludeOverrides.add(name);
+  updateMatrix();
+}
 
 // IQR 기반 이상치 감지: 수량 또는 건당매출 기준으로 상위 이상치 자동 탐지
 function detectOutliers(itemList) {
@@ -656,15 +668,11 @@ function updateMatrix() {
   const bigOpts = ['전체',...BIG_ORDER.filter(b=>d.some(r=>r.cat_big===b))];
   renderFilterBtns('mx-cat-filters', bigOpts, mxCatBig, 'setMxBig');
 
-  // 제외 버튼 상태 (이상치 개수는 아래에서 업데이트)
-  const exBtn = document.getElementById('mx-excl-btn');
-  if(exBtn) { exBtn.className = 'fbtn' + (mxExcludeBasic?' active':''); }
-
   // 필터 적용
   let fd = d;
   if(mxCatBig!=='전체') fd = fd.filter(r=>r.cat_big===mxCatBig);
 
-  // 먼저 아이템별 집계 (이상치 감지를 위해)
+  // 아이템별 집계
   const itemsAll = {};
   fd.forEach(r=>{
     if(!itemsAll[r.item]) itemsAll[r.item]={item:r.item,cat_big:r.cat_big,cat_mid:r.cat_mid,qty:0,net:0};
@@ -677,28 +685,62 @@ function updateMatrix() {
   // 이상치 자동 감지
   const outlierSet = detectOutliers(allList);
 
-  // 제외 메뉴 집계 (노티용)
-  let excludedItems = {};
-  if(mxExcludeBasic && outlierSet.size > 0) {
-    allList.forEach(i=>{
-      if(outlierSet.has(i.item)) {
-        excludedItems[i.item] = {qty:i.qty, net:i.net, avg:i.avg, reason: i.qty > i.avg ? '수량 이상치' : '단가 이상치'};
-      }
-    });
-  }
-
-  // 버튼 텍스트에 이상치 개수 표시
+  // 마스터 버튼 상태
+  const exBtn = document.getElementById('mx-excl-btn');
   if(exBtn) {
-    const cnt = outlierSet.size;
-    exBtn.textContent = cnt > 0 ? `상위 이상치 제외 (${cnt}개)` : '상위 이상치 제외';
+    exBtn.className = 'fbtn' + (mxExcludeBasic?' active':'');
+    exBtn.textContent = outlierSet.size > 0 ? `상위 이상치 제외 (${outlierSet.size}개)` : '상위 이상치 제외';
   }
 
-  // 이상치 제외 여부에 따라 리스트 결정
+  // 정렬 버튼 렌더링
+  const sortBtns = document.getElementById('mx-sort-btns');
+  if(sortBtns) {
+    sortBtns.innerHTML = ['quad','qty','net'].map(s=>{
+      const lbl = s==='quad'?'사분면순':s==='qty'?'수량순':'매출순';
+      return `<div class="fbtn${mxTableSort===s?' active':''}" onclick="setMxSort('${s}')" style="padding:4px 10px;font-size:11px">${lbl}</div>`;
+    }).join('');
+  }
+
+  // 이상치 제외 여부에 따라 리스트 결정 (마스터ON + 이상치 있을 때만 필터)
   let list;
   if(mxExcludeBasic && outlierSet.size > 0) {
-    list = allList.filter(i => !outlierSet.has(i.item));
+    list = allList.filter(i => !outlierSet.has(i.item) || mxExcludeOverrides.has(i.item));
   } else {
     list = allList;
+  }
+
+  // 이상치 패널 렌더링 (접기/펼치기 + 개별 토글)
+  const panel = document.getElementById('mx-excl-panel');
+  if(panel) {
+    if(mxExcludeBasic && outlierSet.size > 0) {
+      const outlierList = [...outlierSet].map(name=>{
+        const it = allList.find(i=>i.item===name);
+        const isExcluded = !mxExcludeOverrides.has(name);
+        const btnStyle = isExcluded
+          ? 'background:#e17055;color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer'
+          : 'background:#00b894;color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer';
+        const btnLabel = isExcluded ? '제외중' : '포함중';
+        return `<span style="display:inline-flex;align-items:center;gap:4px;background:#f8f9fa;border:1px solid #dfe6e9;border-radius:5px;padding:3px 8px;font-size:11px;white-space:nowrap">
+          ${name} <span style="color:#999;font-size:10px">(${comma(it?it.qty:0)}건)</span>
+          <button style="${btnStyle}" onclick="toggleMxExcludeItem('${name.replace(/'/g,"\\'")}')">${btnLabel}</button>
+        </span>`;
+      }).join('');
+      const excludedCnt = [...outlierSet].filter(n=>!mxExcludeOverrides.has(n)).length;
+      panel.innerHTML = `<details style="background:#fffbf0;border:1px solid #ffeaa7;border-radius:6px;padding:6px 10px;font-size:11px">
+        <summary style="cursor:pointer;font-weight:700;color:#856404;list-style:none;display:flex;align-items:center;gap:6px">
+          <span>▶</span> 이상치 감지 항목 ${outlierSet.size}개 (현재 ${excludedCnt}개 제외 중) — 클릭해서 개별 관리
+        </summary>
+        <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">${outlierList}</div>
+      </details>`;
+      // summary 화살표 토글
+      panel.querySelector('details').addEventListener('toggle', function() {
+        this.querySelector('summary span').textContent = this.open ? '▼' : '▶';
+      });
+    } else if(mxExcludeBasic && outlierSet.size === 0) {
+      panel.innerHTML = `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:5px 10px;font-size:11px;color:#0369a1">감지된 이상치 없음 — 전체 ${allList.length}개 항목 표시 중</div>`;
+    } else {
+      panel.innerHTML = '';
+    }
   }
 
   if(list.length===0) {
@@ -761,32 +803,24 @@ function updateMatrix() {
     }
   });
 
-  // 테이블
+  // 테이블 정렬
   const quadOrder = {star:0,puzzle:1,plow:2,dog:3};
-  const bySeg = [...list].sort((a,b)=>quadOrder[a.quad]-quadOrder[b.quad]||b.net-a.net);
-
-  // 상단 이상치 제외 배너
-  const excludedCount = allList.length - list.length;
-  let topBanner = '';
-  if(mxExcludeBasic) {
-    if(excludedCount > 0) {
-      const exList = Object.entries(excludedItems).sort((a,b)=>b[1].qty-a[1].qty);
-      const exNames = exList.map(([name,v])=>`<span style="background:#fff;border-radius:3px;padding:1px 5px;margin:1px 2px;display:inline-block">${name} (${comma(v.qty)}건)</span>`).join('');
-      topBanner = `<tr><td colspan="5" style="background:#fff3cd;color:#856404;padding:7px 10px;font-size:11px;border-bottom:2px solid #ffc107;line-height:1.8">
-        <strong>이상치 ${excludedCount}개 제외 중</strong> — ${list.length}개 항목 표시 / 전체 ${allList.length}개<br>
-        ${exNames}
-      </td></tr>`;
-    } else {
-      topBanner = `<tr><td colspan="5" style="background:#f0f9ff;color:#0369a1;padding:5px 10px;font-size:11px;border-bottom:1px solid #bae6fd">
-        감지된 이상치 없음 — 전체 ${allList.length}개 항목 표시 중
-      </td></tr>`;
-    }
+  let bySeg;
+  if(mxTableSort === 'qty') {
+    bySeg = [...list].sort((a,b)=>b.qty-a.qty);
+  } else if(mxTableSort === 'net') {
+    bySeg = [...list].sort((a,b)=>b.net-a.net);
+  } else {
+    bySeg = [...list].sort((a,b)=>quadOrder[a.quad]-quadOrder[b.quad]||b.net-a.net);
   }
 
-  let h = `<thead><tr><th>구분</th><th>상품명</th><th class="r">수량</th><th class="r">건당매출</th><th class="r">총매출</th></tr></thead><tbody>${topBanner}`;
+  let h = '<thead><tr><th>구분</th><th>상품명</th><th class="r">수량</th><th class="r">건당매출</th><th class="r">총매출</th></tr></thead><tbody>';
   bySeg.forEach(i=>{
     const c = MX_COLORS[i.quad];
-    h += `<tr><td style="color:${c};font-weight:700;font-size:11px">${i.quadLabel}</td><td>${i.item}</td><td class="r">${comma(i.qty)}</td><td class="r">${comma(i.avg)}원</td><td class="r">${M(i.net)}</td></tr>`;
+    const isOverridden = mxExcludeOverrides.has(i.item); // 이상치지만 강제 포함된 항목
+    const rowStyle = isOverridden ? 'background:#fff9e6' : '';
+    const badge = isOverridden ? `<span style="font-size:9px;background:#ffeaa7;color:#856404;border-radius:3px;padding:1px 4px;margin-left:4px">이상치</span>` : '';
+    h += `<tr style="${rowStyle}"><td style="color:${c};font-weight:700;font-size:11px">${i.quadLabel}</td><td>${i.item}${badge}</td><td class="r">${comma(i.qty)}</td><td class="r">${comma(i.avg)}원</td><td class="r">${M(i.net)}</td></tr>`;
   });
 
   // 사분면 요약
