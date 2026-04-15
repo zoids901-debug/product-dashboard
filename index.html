@@ -762,11 +762,28 @@ function updateMatrix() {
   });
 
   // 테이블
-  const sorted = [...list].sort((a,b)=>b.net-a.net);
   const quadOrder = {star:0,puzzle:1,plow:2,dog:3};
   const bySeg = [...list].sort((a,b)=>quadOrder[a.quad]-quadOrder[b.quad]||b.net-a.net);
 
-  let h = '<thead><tr><th>구분</th><th>상품명</th><th class="r">수량</th><th class="r">건당매출</th><th class="r">총매출</th></tr></thead><tbody>';
+  // 상단 이상치 제외 배너
+  const excludedCount = allList.length - list.length;
+  let topBanner = '';
+  if(mxExcludeBasic) {
+    if(excludedCount > 0) {
+      const exList = Object.entries(excludedItems).sort((a,b)=>b[1].qty-a[1].qty);
+      const exNames = exList.map(([name,v])=>`<span style="background:#fff;border-radius:3px;padding:1px 5px;margin:1px 2px;display:inline-block">${name} (${comma(v.qty)}건)</span>`).join('');
+      topBanner = `<tr><td colspan="5" style="background:#fff3cd;color:#856404;padding:7px 10px;font-size:11px;border-bottom:2px solid #ffc107;line-height:1.8">
+        <strong>이상치 ${excludedCount}개 제외 중</strong> — ${list.length}개 항목 표시 / 전체 ${allList.length}개<br>
+        ${exNames}
+      </td></tr>`;
+    } else {
+      topBanner = `<tr><td colspan="5" style="background:#f0f9ff;color:#0369a1;padding:5px 10px;font-size:11px;border-bottom:1px solid #bae6fd">
+        감지된 이상치 없음 — 전체 ${allList.length}개 항목 표시 중
+      </td></tr>`;
+    }
+  }
+
+  let h = `<thead><tr><th>구분</th><th>상품명</th><th class="r">수량</th><th class="r">건당매출</th><th class="r">총매출</th></tr></thead><tbody>${topBanner}`;
   bySeg.forEach(i=>{
     const c = MX_COLORS[i.quad];
     h += `<tr><td style="color:${c};font-weight:700;font-size:11px">${i.quadLabel}</td><td>${i.item}</td><td class="r">${comma(i.qty)}</td><td class="r">${comma(i.avg)}원</td><td class="r">${M(i.net)}</td></tr>`;
@@ -787,17 +804,6 @@ function updateMatrix() {
     if(s) h += `<span style="color:${MX_COLORS[q]};margin-right:12px">${ql[q]} ${s.cnt}개 (${P(s.net,totalNet)})</span>`;
   });
   h += '</td></tr>';
-
-  // 제외 메뉴 노티
-  if(mxExcludeBasic && Object.keys(excludedItems).length>0) {
-    const exList = Object.entries(excludedItems).sort((a,b)=>b[1].qty-a[1].qty);
-    const exTotal = exList.reduce((s,e)=>s+e[1].net,0);
-    h += `<tr><td colspan="5" style="padding-top:10px;font-size:11px;color:#b2bec3;border-top:1px dashed #ddd">`;
-    h += `<strong>상위 이상치 제외 (${exList.length}개):</strong> `;
-    h += exList.map(([name,v])=>`${name} (${comma(v.qty)}건, ${comma(v.avg)}원/건, ${M(v.net)})`).join(' · ');
-    h += ` — 합계 ${M(exTotal)}`;
-    h += `</td></tr>`;
-  }
 
   h += '</tbody>';
   document.getElementById('tbl-matrix').innerHTML=h;
