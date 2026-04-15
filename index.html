@@ -90,6 +90,7 @@ tr:hover td{background:#f8f9fb}
     <option value="">— 월 선택 —</option>
   </select>
   <span id="load-status" style="font-size:11px;color:#888"></span>
+  <div id="cat-note" style="display:none;font-size:11px;color:#856404;background:#fffbf0;border:1px solid #ffeaa7;border-radius:6px;padding:5px 12px;margin-top:6px;width:100%"></div>
 </div>
 
 <div class="filters" id="store-filters"></div>
@@ -922,6 +923,9 @@ async function loadMonth(filename) {
     document.title = '인크커피 상품기획 대시보드 — ' + data.label;
     
     status.textContent = `✓ ${data.label} (${RAW.length.toLocaleString()}건)`;
+    const noteEl = document.getElementById('cat-note');
+    if (data.note) { noteEl.textContent = data.note; noteEl.style.display = 'block'; }
+    else { noteEl.textContent = ''; noteEl.style.display = 'none'; }
     status.style.color = '#00b894';
     
     // Render everything
