@@ -93,7 +93,11 @@ tr:hover td{background:#f8f9fb}
   <div id="cat-note" style="display:none;font-size:11px;color:#856404;background:#fffbf0;border:1px solid #ffeaa7;border-radius:6px;padding:5px 12px;margin-top:6px;width:100%"></div>
 </div>
 
-<div class="filters" id="store-filters"></div>
+<div class="card" style="padding:10px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+  <strong style="font-size:13px;white-space:nowrap">📍 매장</strong>
+  <div id="store-filters" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <span id="store-label" style="font-size:11px;color:#e17055;font-weight:700;margin-left:4px"></span>
+</div>
 
 <!-- KPI Summary -->
 <div class="kpi-row" id="kpi-row"></div>
@@ -254,7 +258,12 @@ function renderFilters() {
   const el = document.getElementById('store-filters');
   el.innerHTML = STORES.map(s=>`<div class="fbtn ${s===selStore?'active':''}" onclick="setStore('${s}')">${s}</div>`).join('');
 }
-function setStore(s) { selStore=s; update(); }
+function setStore(s) {
+  selStore = s;
+  const lbl = document.getElementById('store-label');
+  if(lbl) lbl.textContent = s==='전체' ? '' : `● ${s} 보는 중`;
+  update();
+}
 
 // ============================================================
 // KPI
