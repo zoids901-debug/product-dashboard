@@ -206,7 +206,7 @@ const DATA_BASE_URL = './data/'; // relative path for GitHub Pages
 let AVAILABLE_MONTHS = [];
 // State
 // ============================================================
-let selStore = '전체';
+let selStores = new Set();
 let STORES = ['전체'];
 const BIG_COLORS = {'음료':'#0984e3','베이커리':'#e17055','MD/기타':'#00b894','푸드':'#fdcb6e'};
 const BIG_ORDER = ['음료','베이커리','푸드','MD/기타'];
@@ -247,8 +247,8 @@ const P = (a,b) => b?(a/b*100).toFixed(1)+'%':'-';
 const comma = v => (v||0).toLocaleString();
 
 function getData() {
-  if(selStore==='전체') return RAW;
-  return RAW.filter(r=>r.store===selStore);
+  if(selStores.size===0) return RAW;
+  return RAW.filter(r=>selStores.has(r.store));
 }
 
 // ============================================================
@@ -256,12 +256,20 @@ function getData() {
 // ============================================================
 function renderFilters() {
   const el = document.getElementById('store-filters');
-  el.innerHTML = STORES.map(s=>`<div class="fbtn ${s===selStore?'active':''}" onclick="setStore('${s}')">${s}</div>`).join('');
+  const allActive = selStores.size === 0;
+  let btns = `<div class="fbtn ${allActive?'active':''}" onclick="setStore('전체')" style="margin-right:4px">전체</div>`;
+  btns += '<span style="color:#ddd;margin:0 6px">|</span>';
+  STORES.filter(s=>s!=='전체').forEach(s=>{
+    const on = selStores.has(s);
+    btns += `<div class="fbtn ${on?'active':''}" onclick="setStore('${s}')">${s}</div>`;
+  });
+  el.innerHTML = btns;
 }
 function setStore(s) {
-  selStore = s;
+  if(s==='전체') { selStores.clear(); }
+  else { if(selStores.has(s)) selStores.delete(s); else selStores.add(s); }
   const lbl = document.getElementById('store-label');
-  if(lbl) lbl.textContent = s==='전체' ? '' : `● ${s} 보는 중`;
+  if(lbl) lbl.textContent = selStores.size===0 ? '' : '● ' + [...selStores].join(' + ') + ' 보는 중';
   update();
 }
 
@@ -540,7 +548,7 @@ function updateCatTable() {
 // ============================================================
 function updateStoreTops() {
   const el = document.getElementById('store-tops');
-  const stores = selStore==='전체' ? STORES.filter(s=>s!=='전체') : [selStore];
+  const stores = selStores.size===0 ? STORES.filter(s=>s!=='전체') : [...selStores];
 
   // 대분류 필터 버튼
   const bigOpts = ['전체',...BIG_ORDER.filter(b=>RAW.some(r=>r.cat_big===b))];
@@ -930,7 +938,7 @@ async function loadMonth(filename) {
     document.getElementById('period-label').textContent = 
       'POS 아이템별 판매 데이터 분석 · ' + data.label;
     // 월 변경 시 매장 선택 전체로 리셋
-    selStore = '전체';
+    selStores.clear();
     const storeLbl = document.getElementById('store-label');
     if(storeLbl) storeLbl.textContent = '';
     document.title = '인크커피 상품기획 대시보드 — ' + data.label;
