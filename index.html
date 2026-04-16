@@ -936,11 +936,11 @@ async function loadMonth(filename) {
     // Update period label
     document.getElementById('period-label').textContent = 
       'POS 아이템별 판매 데이터 분석 · ' + data.label;
-    // 월 변경 시 매장 선택 전체로 리셋
-    selStores.clear();
+    // 새 월에 없는 매장 선택 제거
+    [...selStores].forEach(s=>{ if(!data.stores.includes(s)) selStores.delete(s); });
     const storeLbl = document.getElementById('store-label');
-    if(storeLbl) storeLbl.textContent = '';
-    document.title = '인크커피 상품기획 대시보드 — ' + data.label;
+    if(storeLbl) storeLbl.textContent = selStores.size===0 ? '' : '\u25cf ' + [...selStores].join(' + ') + ' \ubcf4\ub294 \uc911';
+    document.title = '\uc778\ud06c\ucf54\ud53c \uc0c1\ud488\uae30\ud68d \ub300\uc2dc\ubcf4\ub4dc \u2014 ' + data.label;
     
     status.textContent = `✓ ${data.label} (${RAW.length.toLocaleString()}건)`;
     const noteEl = document.getElementById('cat-note');
