@@ -114,14 +114,26 @@ tr:hover td{background:#f8f9fb}
   </div>
 </div>
 
-<!-- 음료 소분류 + 베이커리 중분류 -->
+<!-- 음료 + 베이커리 비중 -->
 <div class="grid2">
   <div class="card">
-    <h2>음료 소분류별 비중</h2>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;border-bottom:2px solid #f0f2f5;padding-bottom:8px">
+      <span style="font-size:15px;font-weight:700;color:#2d3436">음료 비중</span>
+      <select id="bev-level" onchange="changeBevLevel(this.value)" style="font-size:12px;padding:2px 8px;border-radius:4px;border:1px solid #ddd;color:#636e72;cursor:pointer">
+        <option value="mid">중분류</option>
+        <option value="small">소분류 (상품)</option>
+      </select>
+    </div>
     <div class="chart-box"><canvas id="chart-bev"></canvas></div>
   </div>
   <div class="card">
-    <h2>베이커리 중분류별 비중</h2>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;border-bottom:2px solid #f0f2f5;padding-bottom:8px">
+      <span style="font-size:15px;font-weight:700;color:#2d3436">베이커리 비중</span>
+      <select id="bak-level" onchange="changeBakLevel(this.value)" style="font-size:12px;padding:2px 8px;border-radius:4px;border:1px solid #ddd;color:#636e72;cursor:pointer">
+        <option value="mid">중분류</option>
+        <option value="small">소분류 (상품)</option>
+      </select>
+    </div>
     <div class="chart-box"><canvas id="chart-bak"></canvas></div>
   </div>
 </div>
@@ -303,6 +315,47 @@ function updateKPI() {
 // Charts
 // ============================================================
 let chartBig, chartBev, chartBak;
+let bevLevel = 'mid', bakLevel = 'mid';
+
+function changeBevLevel(v) { bevLevel = v; updateBevChart(); }
+function changeBakLevel(v) { bakLevel = v; updateBakChart(); }
+
+function buildDonut(canvasId, entries, total, colors, existingChart) {
+  if(existingChart) existingChart.destroy();
+  return new Chart(document.getElementById(canvasId), {
+    type: 'doughnut',
+    data: {
+      labels: entries.map(e=>e[0]),
+      datasets: [{data: entries.map(e=>e[1]), backgroundColor: colors.slice(0, entries.length), borderWidth:2, borderColor:'#fff'}]
+    },
+    options: {responsive:true, maintainAspectRatio:false, plugins:{
+      legend:{position:'bottom', labels:{font:{size:10}}},
+      tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${M(ctx.raw)} (${P(ctx.raw,total)})`}}
+    }}
+  });
+}
+
+function updateBevChart() {
+  const d = getData();
+  const bevColors = ['#0984e3','#00cec9','#6c5ce7','#a29bfe','#fd79a8','#fab1a0','#81ecec','#ffeaa7','#dfe6e9','#b2bec3','#636e72','#2d3436','#e17055','#00b894'];
+  const key = bevLevel === 'mid' ? 'cat_mid' : 'cat_small';
+  const bevData = {};
+  d.filter(r=>r.cat_big==='음료').forEach(r=>{ bevData[r[key]]=(bevData[r[key]]||0)+r.net; });
+  const entries = Object.entries(bevData).sort((a,b)=>b[1]-a[1]);
+  const total = entries.reduce((s,e)=>s+e[1],0);
+  chartBev = buildDonut('chart-bev', entries, total, bevColors, chartBev);
+}
+
+function updateBakChart() {
+  const d = getData();
+  const bakColors = ['#e17055','#fab1a0','#fdcb6e','#ffeaa7','#a29bfe','#6c5ce7','#dfe6e9','#b2bec3','#636e72','#2d3436'];
+  const key = bakLevel === 'mid' ? 'cat_mid' : 'cat_small';
+  const bakData = {};
+  d.filter(r=>r.cat_big==='베이커리').forEach(r=>{ bakData[r[key]]=(bakData[r[key]]||0)+r.net; });
+  const entries = Object.entries(bakData).sort((a,b)=>b[1]-a[1]);
+  const total = entries.reduce((s,e)=>s+e[1],0);
+  chartBak = buildDonut('chart-bak', entries, total, bakColors, chartBak);
+}
 
 function updateCharts() {
   const d = getData();
@@ -325,39 +378,8 @@ function updateCharts() {
     }}
   });
 
-  // 음료 소분류
-  const bevData = {};
-  d.filter(r=>r.cat_big==='음료').forEach(r=>{ bevData[r.cat_small]=(bevData[r.cat_small]||0)+r.net; });
-  const bevEntries = Object.entries(bevData).sort((a,b)=>b[1]-a[1]);
-  const bevTotal = bevEntries.reduce((s,e)=>s+e[1],0);
-  const bevColors = ['#0984e3','#00cec9','#6c5ce7','#a29bfe','#fd79a8','#fab1a0','#81ecec','#ffeaa7','#dfe6e9','#b2bec3','#636e72','#2d3436','#e17055','#00b894'];
-
-  if(chartBev) chartBev.destroy();
-  chartBev = new Chart(document.getElementById('chart-bev'),{
-    type:'doughnut',
-    data:{labels:bevEntries.map(e=>e[0]),datasets:[{data:bevEntries.map(e=>e[1]),backgroundColor:bevColors.slice(0,bevEntries.length),borderWidth:2,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{
-      legend:{position:'bottom',labels:{font:{size:10}}},
-      tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${M(ctx.raw)} (${P(ctx.raw,bevTotal)})`}}
-    }}
-  });
-
-  // 베이커리 중분류
-  const bakData = {};
-  d.filter(r=>r.cat_big==='베이커리').forEach(r=>{ bakData[r.cat_mid]=(bakData[r.cat_mid]||0)+r.net; });
-  const bakEntries = Object.entries(bakData).sort((a,b)=>b[1]-a[1]);
-  const bakTotal = bakEntries.reduce((s,e)=>s+e[1],0);
-  const bakColors = ['#e17055','#fab1a0','#fdcb6e','#ffeaa7','#dfe6e9','#b2bec3'];
-
-  if(chartBak) chartBak.destroy();
-  chartBak = new Chart(document.getElementById('chart-bak'),{
-    type:'doughnut',
-    data:{labels:bakEntries.map(e=>e[0]),datasets:[{data:bakEntries.map(e=>e[1]),backgroundColor:bakColors.slice(0,bakEntries.length),borderWidth:2,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{
-      legend:{position:'bottom',labels:{font:{size:10}}},
-      tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${M(ctx.raw)} (${P(ctx.raw,bakTotal)})`}}
-    }}
-  });
+  updateBevChart();
+  updateBakChart();
 }
 
 // ============================================================
