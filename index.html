@@ -929,6 +929,10 @@ async function loadMonth(filename) {
     // Update period label
     document.getElementById('period-label').textContent = 
       'POS 아이템별 판매 데이터 분석 · ' + data.label;
+    // 월 변경 시 매장 선택 전체로 리셋
+    selStore = '전체';
+    const storeLbl = document.getElementById('store-label');
+    if(storeLbl) storeLbl.textContent = '';
     document.title = '인크커피 상품기획 대시보드 — ' + data.label;
     
     status.textContent = `✓ ${data.label} (${RAW.length.toLocaleString()}건)`;
