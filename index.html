@@ -84,10 +84,14 @@ tr:hover td{background:#f8f9fb}
 
 <!-- Filters -->
 <!-- Month Selector -->
-<div class="card" id="month-panel" style="padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+<div class="card" id="month-panel" style="padding:12px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
   <strong style="font-size:13px">📅 조회 기간</strong>
-  <select id="month-select" style="padding:6px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;font-weight:600;min-width:160px" onchange="loadMonth(this.value)">
-    <option value="">— 월 선택 —</option>
+  <select id="month-from" style="padding:6px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;font-weight:600;min-width:140px;cursor:pointer" onchange="onRangeChange()">
+    <option value="">— 시작 월 —</option>
+  </select>
+  <span style="font-size:13px;color:#888;font-weight:600">~</span>
+  <select id="month-to" style="padding:6px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;font-weight:600;min-width:140px;cursor:pointer" onchange="onRangeChange()">
+    <option value="">— 종료 월 —</option>
   </select>
   <span id="load-status" style="font-size:11px;color:#888"></span>
   <div id="cat-note" style="display:none;font-size:11px;color:#856404;background:#fffbf0;border:1px solid #ffeaa7;border-radius:6px;padding:5px 12px;margin-top:6px;width:100%"></div>
@@ -142,8 +146,13 @@ tr:hover td{background:#f8f9fb}
 <div class="card">
   <h2>상품 ABC 분석</h2>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-    <div style="display:flex;gap:6px" id="abc-cat-filters"></div>
-    <div style="margin-left:auto;display:flex;gap:6px" id="abc-sort-btns"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center" id="abc-cat-filters"></div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:6px" id="abc-sort-btns"></div>
+      <input id="abc-search" type="text" placeholder="🔍 상품 검색..." oninput="setAbcSearch(this.value)"
+        style="padding:4px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:12px;min-width:150px;outline:none">
+      <span id="abc-search-count" style="font-size:11px;color:#0984e3;font-weight:600;white-space:nowrap"></span>
+    </div>
   </div>
   <div style="display:flex;gap:16px;margin-bottom:6px;font-size:11px">
     <span class="rank-a">● A등급 (상위 70%)</span>
@@ -225,10 +234,13 @@ const BIG_ORDER = ['음료','베이커리','푸드','MD/기타'];
 let catExpanded = {};
 
 // ABC 필터 상태
-let abcCatBig = '전체';   // 대분류 필터
-let abcCatMid = '전체';   // 중분류 필터
-let abcSort = 'net';      // 'net' or 'qty'
-let abcExcludeOutlier = false; // ABC 상위 이상치 제외 (기본: OFF)
+let abcCatBig = '전체';
+let abcCatMid = '전체';
+let abcSort = 'net';
+let abcExcludeOutlier = false;
+let abcSearch = '';
+
+function setAbcSearch(v) { abcSearch = v.trim(); updateABC(); }
 
 // 매장 TOP 필터 상태
 let topCatBig = '전체';
@@ -492,10 +504,18 @@ function updateABC() {
   });
 
   const sortLabel = sortKey==='net'?'실매출':'수량';
+  const q = abcSearch.toLowerCase();
+  const matchCount = q ? sorted.filter(i=>i.item.toLowerCase().includes(q)).length : 0;
+  const cntEl = document.getElementById('abc-search-count');
+  if(cntEl) cntEl.textContent = q ? matchCount+'개 매칭' : '';
+
   let h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th></tr></thead><tbody>`;
   sorted.forEach((i,idx)=>{
     const rc = i.rank==='A'?'rank-a':i.rank==='B'?'rank-b':'rank-c';
-    h += `<tr>
+    const isMatch = q && i.item.toLowerCase().includes(q);
+    const isDim   = q && !isMatch;
+    const rowStyle = isMatch ? 'background:#fff9c4;font-weight:600' : isDim ? 'opacity:0.25' : '';
+    h += `<tr style="${rowStyle}">
       <td>${idx+1}</td><td>${i.item}</td><td>${i.cat_big}</td><td>${i.cat_mid}</td>
       <td class="r">${comma(i.qty)}</td><td class="r">${M(i.net)}</td>
       <td class="r">${i.pct.toFixed(1)}%</td><td class="r">${i.cum.toFixed(1)}%</td>
@@ -910,71 +930,104 @@ async function loadManifest() {
       AVAILABLE_MONTHS = manifest.months || [];
     }
   } catch(e) {
-    // manifest not available, try common patterns
-    console.log('No manifest found, using fallback');
+    console.log('No manifest found');
   }
-  
-  // Populate month selector
-  const sel = document.getElementById('month-select');
+
+  const selFrom = document.getElementById('month-from');
+  const selTo   = document.getElementById('month-to');
+
   if (AVAILABLE_MONTHS.length > 0) {
     AVAILABLE_MONTHS.forEach(m => {
-      const opt = document.createElement('option');
-      opt.value = m.file;
-      opt.textContent = m.label;
-      sel.appendChild(opt);
+      [selFrom, selTo].forEach(sel => {
+        const opt = document.createElement('option');
+        opt.value = m.file;
+        opt.textContent = m.label;
+        sel.appendChild(opt);
+      });
     });
-    // Auto-load the latest month
+    // Auto-load latest single month
     const latest = AVAILABLE_MONTHS[AVAILABLE_MONTHS.length - 1];
-    sel.value = latest.file;
-    loadMonth(latest.file);
+    selFrom.value = latest.file;
+    selTo.value   = latest.file;
+    loadRange(latest.file, latest.file);
   } else {
-    document.getElementById('load-status').textContent = '데이터 파일이 없습니다. 빌더에서 업로드해주세요.';
+    document.getElementById('load-status').textContent = '\ub370\uc774\ud130 \ud30c\uc77c\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.';
   }
 }
 
-async function loadMonth(filename) {
-  if (!filename) return;
-  
-  // Show loading
+function onRangeChange() {
+  const f = document.getElementById('month-from').value;
+  const t = document.getElementById('month-to').value;
+  if (!f || !t) return;
+  // Ensure from <= to by swapping if needed
+  const fi = AVAILABLE_MONTHS.findIndex(m=>m.file===f);
+  const ti = AVAILABLE_MONTHS.findIndex(m=>m.file===t);
+  if (fi > ti) {
+    document.getElementById('month-from').value = t;
+    document.getElementById('month-to').value   = f;
+    loadRange(t, f);
+  } else {
+    loadRange(f, t);
+  }
+}
+
+async function loadRange(fromFile, toFile) {
+  if (!fromFile || !toFile) return;
+
   const overlay = document.createElement('div');
   overlay.className = 'loading-overlay';
   overlay.id = 'loading-overlay';
-  overlay.textContent = '데이터 로딩 중...';
+  overlay.textContent = '\ub370\uc774\ud130 \ub85c\ub529 \uc911...';
   document.body.appendChild(overlay);
-  
+
   const status = document.getElementById('load-status');
-  status.textContent = '로딩 중...';
-  
+  status.textContent = '\ub85c\ub529 \uc911...';
+
   try {
-    const res = await fetch(DATA_BASE_URL + filename);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    
-    // Set global data
-    RAW = data.items;
-    STORES = ['전체', ...data.stores];
+    const fi = AVAILABLE_MONTHS.findIndex(m=>m.file===fromFile);
+    const ti = AVAILABLE_MONTHS.findIndex(m=>m.file===toFile);
+    const months = AVAILABLE_MONTHS.slice(Math.min(fi,ti), Math.max(fi,ti)+1);
+
+    // Fetch all months in range
+    const results = await Promise.all(months.map(m =>
+      fetch(DATA_BASE_URL + m.file).then(r => { if(!r.ok) throw new Error(m.file+' HTTP '+r.status); return r.json(); })
+    ));
+
+    // Merge
+    const allItems = results.flatMap(d => d.items || []);
+    const allStores = [...new Set(results.flatMap(d => d.stores || []))].sort();
+
+    RAW = allItems;
+    STORES = ['\uc804\uccb4', ...allStores];
     DATA_LOADED = true;
-    
-    // Update period label
-    document.getElementById('period-label').textContent = 
-      'POS 아이템별 판매 데이터 분석 · ' + data.label;
+
+    // Label
+    const isRange = months.length > 1;
+    const label = isRange
+      ? months[0].label + ' ~ ' + months[months.length-1].label
+      : months[0].label;
+
+    document.getElementById('period-label').textContent = 'POS \uc544\uc774\ud15c\ubcc4 \ud310\ub9e4 \ub370\uc774\ud130 \ubd84\uc11d \u00b7 ' + label;
+    document.title = '\uc778\ud06c\ucf54\ud53c \uc0c1\ud488\uae30\ud68d \ub300\uc2dc\ubcf4\ub4dc \u2014 ' + label;
+
     const storeLbl = document.getElementById('store-label');
     if(storeLbl) storeLbl.textContent = selStores.size===0 ? '' : '\u25cf ' + [...selStores].join(' + ') + ' \ubcf4\ub294 \uc911';
-    document.title = '\uc778\ud06c\ucf54\ud53c \uc0c1\ud488\uae30\ud68d \ub300\uc2dc\ubcf4\ub4dc \u2014 ' + data.label;
-    
-    status.textContent = `✓ ${data.label} (${RAW.length.toLocaleString()}건)`;
-    const noteEl = document.getElementById('cat-note');
-    if (data.note) { noteEl.textContent = data.note; noteEl.style.display = 'block'; }
-    else { noteEl.textContent = ''; noteEl.style.display = 'none'; }
+
+    status.textContent = '\u2713 ' + label + ' (' + RAW.length.toLocaleString() + '\uac74)';
     status.style.color = '#00b894';
-    
-    // Render everything
+
+    // Note: show if first month has note (range mode no note)
+    const noteEl = document.getElementById('cat-note');
+    const firstNote = !isRange && results[0].note;
+    if (firstNote) { noteEl.textContent = firstNote; noteEl.style.display = 'block'; }
+    else { noteEl.textContent = ''; noteEl.style.display = 'none'; }
+
     update();
-    
+
   } catch(e) {
-    status.textContent = '❌ 로드 실패: ' + e.message;
+    status.textContent = '\u274c \ub85c\ub4dc \uc2e4\ud328: ' + e.message;
     status.style.color = '#e17055';
-    console.error('Data load error:', e);
+    console.error(e);
   } finally {
     const ov = document.getElementById('loading-overlay');
     if (ov) ov.remove();
