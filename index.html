@@ -349,7 +349,7 @@ function updateCharts() {
 function updateStoreCompare() {
   const el = document.getElementById('store-compare');
   let html = '';
-  const stores = ['가산점','광주점','다산점','수원점','하남점'];
+  const stores = STORES.filter(s=>s!=='전체');
 
   stores.forEach(store=>{
     const sd = RAW.filter(r=>r.store===store);
@@ -531,7 +531,7 @@ function updateCatTable() {
 // ============================================================
 function updateStoreTops() {
   const el = document.getElementById('store-tops');
-  const stores = selStore==='전체' ? ['가산점','광주점','다산점','수원점','하남점','운정점'] : [selStore];
+  const stores = selStore==='전체' ? STORES.filter(s=>s!=='전체') : [selStore];
 
   // 대분류 필터 버튼
   const bigOpts = ['전체',...BIG_ORDER.filter(b=>RAW.some(r=>r.cat_big===b))];
