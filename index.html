@@ -994,7 +994,9 @@ async function loadRange(fromFile, toFile) {
     ));
 
     // Merge — 실제 판매 데이터 있는 매장만 추출
-    const allItems = results.flatMap(d => d.items || []);
+    // 매장명 통일: '가산점' → '가산' (점 suffix 제거)
+    const normStore = s => s.endsWith('점') ? s.slice(0, -1) : s;
+    const allItems = results.flatMap(d => d.items || []).map(r => ({...r, store: normStore(r.store)}));
     const activeStores = [...new Set(allItems.map(r => r.store))].sort();
 
     RAW = allItems;
