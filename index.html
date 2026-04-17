@@ -993,12 +993,12 @@ async function loadRange(fromFile, toFile) {
       fetch(DATA_BASE_URL + m.file).then(r => { if(!r.ok) throw new Error(m.file+' HTTP '+r.status); return r.json(); })
     ));
 
-    // Merge
+    // Merge — 실제 판매 데이터 있는 매장만 추출
     const allItems = results.flatMap(d => d.items || []);
-    const allStores = [...new Set(results.flatMap(d => d.stores || []))].sort();
+    const activeStores = [...new Set(allItems.map(r => r.store))].sort();
 
     RAW = allItems;
-    STORES = ['\uc804\uccb4', ...allStores];
+    STORES = ['\uc804\uccb4', ...activeStores];
     DATA_LOADED = true;
 
     // Label
