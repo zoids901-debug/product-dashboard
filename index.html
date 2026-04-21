@@ -37,7 +37,7 @@ body{font-family:'Pretendard','Apple SD Gothic Neo',sans-serif;background:#f0f2f
 
 /* Tables */
 table{width:100%;border-collapse:collapse;font-size:12px}
-th{background:#f8f9fa;padding:8px 10px;text-align:left;font-weight:700;border-bottom:2px solid #eee;position:sticky;top:0}
+th{background:#f8f9fa;padding:8px 10px;text-align:left;font-weight:700;border-bottom:2px solid #eee;position:sticky;top:0;z-index:1}
 td{padding:7px 10px;border-bottom:1px solid #f0f2f5}
 tr:hover td{background:#f8f9fb}
 .r{text-align:right}
@@ -990,12 +990,13 @@ function updateStoreTops() {
     html += `<div><div style="font-size:13px;font-weight:700;margin-bottom:8px">${store}`;
     if(excludedNames.size>0) html += ` <span style="font-size:10px;font-weight:400;color:#b2bec3">(${excludedNames.size}개 제외)</span>`;
     html += `</div>`;
+    html += `<div style="max-height:300px;overflow-y:auto;border-radius:6px;border:1px solid #f0f2f5">`;
     html += `<table><thead><tr><th>#</th><th>메뉴</th><th class="r">수량</th><th class="r">매출</th></tr></thead><tbody>`;
     top.forEach((i,idx)=>{
       html += `<tr><td>${idx+1}</td><td><span style="color:${BIG_COLORS[i.cat_big]||'#888'};font-size:10px">●</span> ${i.item}</td><td class="r">${comma(i.qty)}</td><td class="r">${M(i.net)}</td></tr>`;
     });
     if(top.length===0) html += `<tr><td colspan="4" style="color:#aaa;text-align:center">데이터 없음</td></tr>`;
-    html += `</tbody></table></div>`;
+    html += `</tbody></table></div></div>`;
   });
 
   // 이상치 버튼에 전체 제외 개수 표시
