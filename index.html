@@ -716,30 +716,92 @@ async function showDrill(itemName, catBig) {
   const sellingStores = sortedStores
     .map(s => `${s} ${comma(storeQty[s])}${unit}`).join(' · ');
 
-  // 주말 인덱스
-  const weekendIndices = fullDates.map((d,i) => d.dow===0||d.dow===6 ? i : -1).filter(i=>i>=0);
+  // ── 집계 단위 자동 결정 ──────────────────────────
+  const numDays = labels.length;
+  const aggMode = numDays > 186 ? 'month' : numDays > 62 ? 'week' : 'day';
+
+  // ── 집계 함수 ────────────────────────────────────
+  function aggregate(mode) {
+    if (mode === 'day') {
+      return { aggLabels: labels, aggFullDates: fullDates, aggNet: netData, aggStoreDailyQty: storeDailyQty };
+    }
+    const buckets = {};  // key → { label, dates, net, storeQty }
+    labels.forEach((_, i) => {
+      const { date, dow } = fullDates[i];
+      let key, lbl;
+      if (mode === 'month') {
+        key = date.slice(0, 7);
+        lbl = date.slice(2, 7);   // YY-MM
+      } else {
+        // ISO week: Monday-based
+        const d = new Date(date);
+        const jan1 = new Date(d.getFullYear(), 0, 1);
+        const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+        key = `${d.getFullYear()}-W${String(week).padStart(2,'0')}`;
+        const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
+        lbl = `${String(mon.getMonth()+1).padStart(2,'0')}/${String(mon.getDate()).padStart(2,'0')}~`;
+      }
+      if (!buckets[key]) buckets[key] = { label: lbl, dates: [], net: 0, storeQty: {} };
+      buckets[key].dates.push({ date, dow });
+      buckets[key].net += netData[i];
+      sortedStores.forEach(s => {
+        buckets[key].storeQty[s] = (buckets[key].storeQty[s]||0) + (storeDailyQty[s]?.[i]||0);
+      });
+    });
+    const keys = Object.keys(buckets);
+    const aggLabels       = keys.map(k => buckets[k].label);
+    const aggFullDates    = keys.map(k => buckets[k].dates[0]);
+    const aggNet          = keys.map(k => buckets[k].net);
+    const aggStoreDailyQty = {};
+    sortedStores.forEach(s => {
+      aggStoreDailyQty[s] = keys.map(k => buckets[k].storeQty[s]||0);
+    });
+    return { aggLabels, aggFullDates, aggNet, aggStoreDailyQty };
+  }
+
+  const { aggLabels, aggFullDates, aggNet, aggStoreDailyQty } = aggregate(aggMode);
+
+  // ── 이동평균 ─────────────────────────────────────
+  const maWindow = aggMode === 'day' ? 7 : aggMode === 'week' ? 4 : 3;
+  const aggTotalQtyArr = aggLabels.map((_,i) =>
+    sortedStores.reduce((s,st) => s + (aggStoreDailyQty[st]?.[i]||0), 0));
+  const maData = aggTotalQtyArr.map((_, i) => {
+    const slice = aggTotalQtyArr.slice(Math.max(0, i - maWindow + 1), i + 1);
+    return Math.round(slice.reduce((a,b)=>a+b,0) / slice.length * 10) / 10;
+  });
+
+  // ── 집계 모드 표시 ────────────────────────────────
+  const modeLabel = aggMode === 'day' ? '일별' : aggMode === 'week' ? '주별 집계' : '월별 집계';
+  const maLabel   = aggMode === 'day' ? '7일 이동평균' : aggMode === 'week' ? '4주 이동평균' : '3개월 이동평균';
+
+  // 주말 인덱스 (일별 모드만)
+  const weekendIndices = aggMode === 'day'
+    ? aggFullDates.map((d,i) => d.dow===0||d.dow===6 ? i : -1).filter(i=>i>=0)
+    : [];
 
   document.getElementById('drill-sub').textContent =
-    labels.length
-      ? `총 ${comma(totalQty)}${unit} · ${M(totalNet)}　｜　${sellingStores}`
+    aggLabels.length
+      ? `총 ${comma(totalQty)}${unit} · ${M(totalNet)}　｜　${sellingStores}　[${modeLabel}]`
       : '해당 기간 일별 파일 미수집';
 
   if (drillChart) { drillChart.destroy(); drillChart = null; }
-  if (!labels.length) return;
+  if (!aggLabels.length) return;
 
-  // 매장별 스택 데이터셋
+  // ── 매장별 스택 데이터셋 ──────────────────────────
   const storeDatasets = sortedStores.map(s => {
     const [bg, border] = STORE_COLORS[s] || DEFAULT_COLOR;
-    const data = labels.map((_,i) => storeDailyQty[s]?.[i] || 0);
+    const data = aggLabels.map((_,i) => aggStoreDailyQty[s]?.[i] || 0);
     return {
       label: s,
       data,
-      backgroundColor: labels.map((_,i) =>
-        (fullDates[i]?.dow===0||fullDates[i]?.dow===6)
-          ? bg.replace(/[\d.]+\)$/, '0.4)') : bg),
+      backgroundColor: aggMode === 'day'
+        ? aggLabels.map((_,i) =>
+            (aggFullDates[i]?.dow===0||aggFullDates[i]?.dow===6)
+              ? bg.replace(/[\d.]+\)$/, '0.4)') : bg)
+        : bg,
       borderColor: border,
       borderWidth: 1,
-      borderRadius: 2,
+      borderRadius: 3,
       stack: 'qty',
       yAxisID: 'y'
     };
@@ -750,20 +812,36 @@ async function showDrill(itemName, catBig) {
     type: 'bar',
     plugins: [weekendBgPlugin],
     data: {
-      labels,
-      datasets: [...storeDatasets, {
-        label: '매출',
-        data: netData,
-        type: 'line',
-        borderColor: '#e17055',
-        backgroundColor: 'rgba(225,112,85,0.06)',
-        borderWidth: 2,
-        pointRadius: 3,
-        tension: 0.3,
-        fill: true,
-        stack: undefined,
-        yAxisID: 'y2'
-      }]
+      labels: aggLabels,
+      datasets: [
+        ...storeDatasets,
+        {
+          label: maLabel,
+          data: maData,
+          type: 'line',
+          borderColor: '#a29bfe',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderDash: [5, 3],
+          pointRadius: 0,
+          tension: 0.4,
+          stack: undefined,
+          yAxisID: 'y'
+        },
+        {
+          label: '매출',
+          data: aggNet,
+          type: 'line',
+          borderColor: '#e17055',
+          backgroundColor: 'rgba(225,112,85,0.06)',
+          borderWidth: 2,
+          pointRadius: aggMode === 'day' ? 2 : 4,
+          tension: 0.3,
+          fill: true,
+          stack: undefined,
+          yAxisID: 'y2'
+        }
+      ]
     },
     options: {
       responsive: true,
@@ -773,13 +851,16 @@ async function showDrill(itemName, catBig) {
         legend: { position: 'top' },
         tooltip: {
           callbacks: {
-            label: c => c.dataset.yAxisID==='y2'
-              ? `매출: ${M(c.raw)}`
-              : `${c.dataset.label}: ${comma(c.raw)}${unit}`
+            label: c => {
+              if (c.dataset.yAxisID === 'y2') return `매출: ${M(c.raw)}`;
+              if (c.dataset.label === maLabel) return `${maLabel}: ${c.raw}${unit}`;
+              return `${c.dataset.label}: ${comma(c.raw)}${unit}`;
+            }
           }
         }
       },
       scales: {
+        x: { ticks: { maxTicksLimit: aggMode === 'month' ? 18 : aggMode === 'week' ? 26 : 62, maxRotation: 45 } },
         y:  { position:'left',  stacked:true, title:{display:true,text:`판매량(${unit})`}, beginAtZero:true },
         y2: { position:'right', title:{display:true,text:'매출'}, beginAtZero:true,
               grid:{drawOnChartArea:false}, ticks:{callback: v=>M(v)} }
