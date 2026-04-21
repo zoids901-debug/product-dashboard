@@ -624,7 +624,8 @@ const weekendBgPlugin = {
     ctx.save();
     wkIdx.forEach(i => {
       const x = xScale.getPixelForValue(i);
-      const w = xScale.width / (xScale.ticks.length || 1);
+      const total = chart.data.labels?.length || xScale.ticks.length || 1;
+      const w = xScale.width / total;
       ctx.fillStyle = 'rgba(231,76,60,0.08)';
       ctx.fillRect(x - w/2, chartArea.top, w, chartArea.height);
     });
