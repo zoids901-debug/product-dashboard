@@ -250,6 +250,8 @@ let abcSort = 'net';
 // 드릴다운 상태
 let LOADED_MONTHS = [];  // loadRange에서 저장
 let drillChart = null;
+let currentDrillItem = null;
+let currentDrillCat = '';
 let abcExcludeOutlier = false;
 let abcSearch = '';
 
@@ -308,6 +310,7 @@ function setStore(s) {
   const lbl = document.getElementById('store-label');
   if(lbl) lbl.textContent = selStores.size===0 ? '' : '● ' + [...selStores].join(' + ') + ' 보는 중';
   update();
+  refreshDrillIfOpen();
 }
 
 // ============================================================
@@ -529,7 +532,8 @@ function updateABC() {
     const isDim   = q && !isMatch;
     const rowStyle = isMatch ? 'background:#fff9c4;font-weight:600' : isDim ? 'opacity:0.25' : '';
     const itemEsc = i.item.replace(/'/g,"\\'");
-    h += `<tr style="${rowStyle};cursor:pointer" onclick="showDrill('${itemEsc}')" title="클릭하면 일별 판매 추이 보기">
+    const catEsc = i.cat_big.replace(/'/g,"\\'");
+    h += `<tr style="${rowStyle};cursor:pointer" onclick="showDrill('${itemEsc}','${catEsc}')" title="클릭하면 일별 판매 추이 보기">
       <td>${idx+1}</td><td style="color:#0984e3;text-decoration:underline dotted">${i.item}</td><td>${i.cat_big}</td><td>${i.cat_mid}</td>
       <td class="r">${comma(i.qty)}</td><td class="r">${M(i.net)}</td>
       <td class="r">${i.pct.toFixed(1)}%</td><td class="r">${i.cum.toFixed(1)}%</td>
@@ -548,32 +552,56 @@ function backToABC() {
   document.getElementById('abc-drill').style.display = 'none';
   document.getElementById('abc-table-wrap').style.display = '';
   if (drillChart) { drillChart.destroy(); drillChart = null; }
+  currentDrillItem = null; currentDrillCat = '';
 }
 
-async function showDrill(itemName) {
+// 주말 배경 플러그인
+const weekendBgPlugin = {
+  id: 'weekendBg',
+  beforeDraw(chart) {
+    const { ctx, chartArea, scales, config } = chart;
+    const wkIdx = config.options.plugins.weekendBg?.indices || [];
+    if (!wkIdx.length || !scales.x) return;
+    const xScale = scales.x;
+    ctx.save();
+    wkIdx.forEach(i => {
+      const x = xScale.getPixelForValue(i);
+      const w = xScale.width / (xScale.ticks.length || 1);
+      ctx.fillStyle = 'rgba(231,76,60,0.08)';
+      ctx.fillRect(x - w/2, chartArea.top, w, chartArea.height);
+    });
+    ctx.restore();
+  }
+};
+
+async function showDrill(itemName, catBig) {
   if (!LOADED_MONTHS.length) return;
+  currentDrillItem = itemName;
+  currentDrillCat  = catBig || '';
 
   document.getElementById('abc-table-wrap').style.display = 'none';
   const drillEl = document.getElementById('abc-drill');
   drillEl.style.display = '';
   document.getElementById('drill-title').textContent = itemName;
-  document.getElementById('drill-sub').textContent = '일별 판매 데이터 로딩 중...';
+  document.getElementById('drill-sub').textContent = '로딩 중...';
 
-  // 선택된 기간의 날짜 목록 생성
+  // 단위 결정
+  const unit = currentDrillCat === '베이커리' ? '개' : '잔';
+
+  // 날짜 목록 생성
   const dates = [];
   for (const m of LOADED_MONTHS) {
     const yy = '20' + m.file.slice(0,2);
     const mm = m.file.slice(2,4);
     const daysInMonth = new Date(+yy, +mm, 0).getDate();
-    for (let d = 1; d <= daysInMonth; d++) {
+    for (let d = 1; d <= daysInMonth; d++)
       dates.push(`${yy}-${mm}-${String(d).padStart(2,'0')}`);
-    }
   }
 
-  // 일별 파일 병렬 fetch (없으면 null)
+  // 일별 파일 fetch
   const DAILY_BASE = './data/daily/';
-  const results = await Promise.all(dates.map(async dt => {
-    const fname = dt.slice(2).replace(/-/g,'') + '.json'; // 2026-04-01 → 260401.json
+  const fetched = await Promise.all(dates.map(async dt => {
+    const fname = dt.slice(2).replace(/-/g,'') + '.json';
     try {
       const r = await fetch(DAILY_BASE + fname);
       if (!r.ok) return null;
@@ -581,34 +609,40 @@ async function showDrill(itemName) {
     } catch { return null; }
   }));
 
-  // 상품 데이터 집계
+  // 매장 필터
   const activeStores = [...selStores].filter(s => s !== '전체');
   const useStores = activeStores.length ? activeStores : null;
 
-  const labels = [], qtyData = [], netData = [];
+  const labels = [], fullDates = [], qtyData = [], netData = [];
   let totalQty = 0, totalNet = 0;
 
-  for (const res of results) {
+  for (const res of fetched) {
     if (!res) continue;
     let qty = 0, net = 0;
-    const stores = res.data.stores || {};
-    for (const [store, items] of Object.entries(stores)) {
+    for (const [store, items] of Object.entries(res.data.stores || {})) {
       const normS = store.endsWith('점') ? store.slice(0,-1) : store;
       if (useStores && !useStores.includes(normS)) continue;
-      for (const it of items) {
+      for (const it of items)
         if (it.item === itemName) { qty += it.qty; net += it.net; }
-      }
     }
-    if (qty > 0) {
-      labels.push(res.date.slice(5)); // MM-DD
-      qtyData.push(qty);
-      netData.push(net);
-      totalQty += qty; totalNet += net;
-    }
+    // 판매 없어도 날짜는 포함 (0으로)
+    const dt = new Date(res.date);
+    const dow = dt.getDay(); // 0=일, 6=토
+    const label = res.date.slice(5) + (dow===0?' 일':dow===6?' 토':'');
+    labels.push(label);
+    fullDates.push({ date: res.date, dow });
+    qtyData.push(qty);
+    netData.push(net);
+    totalQty += qty; totalNet += net;
   }
 
+  // 주말 인덱스
+  const weekendIndices = fullDates.map((d,i) => d.dow===0||d.dow===6 ? i : -1).filter(i=>i>=0);
+
   document.getElementById('drill-sub').textContent =
-    labels.length ? `총 ${comma(totalQty)}잔 · ${M(totalNet)}` : '해당 기간 판매 데이터 없음 (일별 파일 미수집)';
+    labels.length
+      ? `총 ${comma(totalQty)}${unit} · ${M(totalNet)}`
+      : '해당 기간 일별 파일 미수집';
 
   if (drillChart) { drillChart.destroy(); drillChart = null; }
   if (!labels.length) return;
@@ -616,13 +650,17 @@ async function showDrill(itemName) {
   const ctx = document.getElementById('drill-chart').getContext('2d');
   drillChart = new Chart(ctx, {
     type: 'bar',
+    plugins: [weekendBgPlugin],
     data: {
       labels,
       datasets: [{
-        label: '판매량 (잔)',
+        label: `판매량 (${unit})`,
         data: qtyData,
-        backgroundColor: 'rgba(9,132,227,0.7)',
-        borderColor: '#0984e3',
+        backgroundColor: labels.map((_,i) =>
+          (fullDates[i]?.dow===0||fullDates[i]?.dow===6)
+            ? 'rgba(231,76,60,0.55)' : 'rgba(9,132,227,0.7)'),
+        borderColor: labels.map((_,i) =>
+          (fullDates[i]?.dow===0||fullDates[i]?.dow===6) ? '#e74c3c' : '#0984e3'),
         borderWidth: 1,
         borderRadius: 4,
         yAxisID: 'y'
@@ -631,7 +669,7 @@ async function showDrill(itemName) {
         data: netData,
         type: 'line',
         borderColor: '#e17055',
-        backgroundColor: 'rgba(225,112,85,0.1)',
+        backgroundColor: 'rgba(225,112,85,0.08)',
         borderWidth: 2,
         pointRadius: 3,
         tension: 0.3,
@@ -643,23 +681,29 @@ async function showDrill(itemName) {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
       plugins: {
+        weekendBg: { indices: weekendIndices },
         legend: { position: 'top' },
         tooltip: {
           callbacks: {
-            label: ctx => ctx.datasetIndex === 0
-              ? `판매량: ${comma(ctx.raw)}잔`
-              : `매출: ${M(ctx.raw)}`
+            label: c => c.datasetIndex===0
+              ? `판매량: ${comma(c.raw)}${unit}`
+              : `매출: ${M(c.raw)}`
           }
         }
       },
       scales: {
-        y:  { position:'left',  title:{display:true,text:'판매량(잔)'}, beginAtZero:true },
+        y:  { position:'left',  title:{display:true,text:`판매량(${unit})`}, beginAtZero:true },
         y2: { position:'right', title:{display:true,text:'매출'}, beginAtZero:true,
-              grid:{drawOnChartArea:false},
-              ticks:{ callback: v => M(v) } }
+              grid:{drawOnChartArea:false}, ticks:{callback: v=>M(v)} }
       }
     }
   });
+}
+
+// 드릴다운 자동 갱신 — 필터 변경 시 호출
+function refreshDrillIfOpen() {
+  if (currentDrillItem && document.getElementById('abc-drill').style.display !== 'none')
+    showDrill(currentDrillItem, currentDrillCat);
 }
 
 // ============================================================
@@ -1094,16 +1138,16 @@ function onRangeChange() {
   const f = document.getElementById('month-from').value;
   const t = document.getElementById('month-to').value;
   if (!f || !t) return;
-  // Ensure from <= to by swapping if needed
+  // 드릴다운 열려있으면 저장 후 닫기 (새 데이터 로드 후 재오픈)
+  const pendingDrill = currentDrillItem;
+  const pendingCat   = currentDrillCat;
+  if (pendingDrill) backToABC();
   const fi = AVAILABLE_MONTHS.findIndex(m=>m.file===f);
   const ti = AVAILABLE_MONTHS.findIndex(m=>m.file===t);
-  if (fi > ti) {
-    document.getElementById('month-from').value = t;
-    document.getElementById('month-to').value   = f;
-    loadRange(t, f);
-  } else {
-    loadRange(f, t);
-  }
+  const loadPromise = fi > ti
+    ? (document.getElementById('month-from').value=t, document.getElementById('month-to').value=f, loadRange(t,f))
+    : loadRange(f,t);
+  if (pendingDrill) loadPromise.then(() => showDrill(pendingDrill, pendingCat));
 }
 
 async function loadRange(fromFile, toFile) {
