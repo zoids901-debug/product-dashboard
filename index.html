@@ -613,36 +613,50 @@ async function showDrill(itemName, catBig) {
   const activeStores = [...selStores].filter(s => s !== '전체');
   const useStores = activeStores.length ? activeStores : null;
 
-  const labels = [], fullDates = [], qtyData = [], netData = [];
+  const STORE_COLORS = {
+    '다산': ['rgba(9,132,227,0.75)',  '#0984e3'],
+    '가산': ['rgba(0,184,148,0.75)',  '#00b894'],
+    '광주': ['rgba(253,203,110,0.85)','#fdcb6e'],
+    '하남': ['rgba(162,155,254,0.75)','#a29bfe'],
+    '수원': ['rgba(253,121,168,0.75)','#fd79a8'],
+    '운정': ['rgba(85,239,196,0.75)', '#55efc4'],
+  };
+  const DEFAULT_COLOR = ['rgba(99,110,114,0.7)', '#636e72'];
+
+  const labels = [], fullDates = [], netData = [];
   let totalQty = 0, totalNet = 0;
-  const storeQty = {};
+  const storeQty = {};        // 매장별 총합
+  const storeDailyQty = {};   // 매장별 날짜별 수량
 
   for (const res of fetched) {
     if (!res) continue;
-    let qty = 0, net = 0;
-    for (const [store, items] of Object.entries(res.data.stores || {})) {
-      const normS = store.endsWith('점') ? store.slice(0,-1) : store;
-      if (useStores && !useStores.includes(normS)) continue;
-      for (const it of items)
-        if (it.item === itemName) {
-          qty += it.qty; net += it.net;
-          storeQty[normS] = (storeQty[normS] || 0) + it.qty;
-        }
-    }
     const dt = new Date(res.date);
     const dow = dt.getDay();
     const label = res.date.slice(5) + (dow===0?' 일':dow===6?' 토':'');
     labels.push(label);
     fullDates.push({ date: res.date, dow });
-    qtyData.push(qty);
-    netData.push(net);
-    totalQty += qty; totalNet += net;
+
+    let dayNet = 0;
+    for (const [store, items] of Object.entries(res.data.stores || {})) {
+      const normS = store.endsWith('점') ? store.slice(0,-1) : store;
+      if (useStores && !useStores.includes(normS)) continue;
+      for (const it of items) {
+        if (it.item === itemName) {
+          storeQty[normS] = (storeQty[normS]||0) + it.qty;
+          storeDailyQty[normS] = storeDailyQty[normS] || [];
+          const idx = labels.length - 1;
+          storeDailyQty[normS][idx] = (storeDailyQty[normS][idx]||0) + it.qty;
+          totalQty += it.qty; dayNet += it.net; totalNet += it.net;
+        }
+      }
+    }
+    netData.push(dayNet);
   }
 
-  const sellingStores = Object.entries(storeQty)
-    .sort((a,b) => b[1]-a[1])
-    .map(([s,q]) => `${s} ${comma(q)}${unit}`)
-    .join(' · ');
+  // 판매 매장 목록 (판매량 순)
+  const sortedStores = Object.keys(storeQty).sort((a,b) => storeQty[b]-storeQty[a]);
+  const sellingStores = sortedStores
+    .map(s => `${s} ${comma(storeQty[s])}${unit}`).join(' · ');
 
   // 주말 인덱스
   const weekendIndices = fullDates.map((d,i) => d.dow===0||d.dow===6 ? i : -1).filter(i=>i>=0);
@@ -655,33 +669,41 @@ async function showDrill(itemName, catBig) {
   if (drillChart) { drillChart.destroy(); drillChart = null; }
   if (!labels.length) return;
 
+  // 매장별 스택 데이터셋
+  const storeDatasets = sortedStores.map(s => {
+    const [bg, border] = STORE_COLORS[s] || DEFAULT_COLOR;
+    const data = labels.map((_,i) => storeDailyQty[s]?.[i] || 0);
+    return {
+      label: s,
+      data,
+      backgroundColor: labels.map((_,i) =>
+        (fullDates[i]?.dow===0||fullDates[i]?.dow===6)
+          ? bg.replace(/[\d.]+\)$/, '0.4)') : bg),
+      borderColor: border,
+      borderWidth: 1,
+      borderRadius: 2,
+      stack: 'qty',
+      yAxisID: 'y'
+    };
+  });
+
   const ctx = document.getElementById('drill-chart').getContext('2d');
   drillChart = new Chart(ctx, {
     type: 'bar',
     plugins: [weekendBgPlugin],
     data: {
       labels,
-      datasets: [{
-        label: `판매량 (${unit})`,
-        data: qtyData,
-        backgroundColor: labels.map((_,i) =>
-          (fullDates[i]?.dow===0||fullDates[i]?.dow===6)
-            ? 'rgba(231,76,60,0.55)' : 'rgba(9,132,227,0.7)'),
-        borderColor: labels.map((_,i) =>
-          (fullDates[i]?.dow===0||fullDates[i]?.dow===6) ? '#e74c3c' : '#0984e3'),
-        borderWidth: 1,
-        borderRadius: 4,
-        yAxisID: 'y'
-      }, {
+      datasets: [...storeDatasets, {
         label: '매출',
         data: netData,
         type: 'line',
         borderColor: '#e17055',
-        backgroundColor: 'rgba(225,112,85,0.08)',
+        backgroundColor: 'rgba(225,112,85,0.06)',
         borderWidth: 2,
         pointRadius: 3,
         tension: 0.3,
         fill: true,
+        stack: undefined,
         yAxisID: 'y2'
       }]
     },
@@ -693,14 +715,14 @@ async function showDrill(itemName, catBig) {
         legend: { position: 'top' },
         tooltip: {
           callbacks: {
-            label: c => c.datasetIndex===0
-              ? `판매량: ${comma(c.raw)}${unit}`
-              : `매출: ${M(c.raw)}`
+            label: c => c.dataset.yAxisID==='y2'
+              ? `매출: ${M(c.raw)}`
+              : `${c.dataset.label}: ${comma(c.raw)}${unit}`
           }
         }
       },
       scales: {
-        y:  { position:'left',  title:{display:true,text:`판매량(${unit})`}, beginAtZero:true },
+        y:  { position:'left',  stacked:true, title:{display:true,text:`판매량(${unit})`}, beginAtZero:true },
         y2: { position:'right', title:{display:true,text:'매출'}, beginAtZero:true,
               grid:{drawOnChartArea:false}, ticks:{callback: v=>M(v)} }
       }
