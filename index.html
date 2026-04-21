@@ -69,9 +69,52 @@ tr:hover td{background:#f8f9fb}
 .loading-overlay.hidden{display:none}
 #month-select{cursor:pointer}
 #month-select:focus{outline:none;border-color:#2d3436}
+
+/* Floating filter panel */
+#float-filter{
+  position:fixed;
+  top:50%;
+  right:16px;
+  transform:translateY(-50%);
+  background:#fff;
+  border-radius:14px;
+  box-shadow:0 4px 24px rgba(0,0,0,.15);
+  padding:14px 12px;
+  z-index:500;
+  display:none;
+  flex-direction:column;
+  gap:10px;
+  min-width:120px;
+  max-width:150px;
+  border:1.5px solid #e0e0e0;
+  transition:opacity .2s;
+}
+#float-filter.visible{display:flex}
+#float-filter .ff-title{font-size:10px;font-weight:700;color:#888;letter-spacing:.5px;text-transform:uppercase}
+#float-filter .ff-divider{height:1px;background:#f0f2f5;margin:0}
+#float-filter .fbtn{font-size:11px;padding:5px 10px;border-radius:16px;text-align:center}
+#float-filter .ff-selects{display:flex;flex-direction:column;gap:6px}
+#float-filter .ff-selects select{font-size:11px;padding:5px 8px;border:1.5px solid #ddd;border-radius:8px;font-weight:600;cursor:pointer;width:100%}
+#float-filter .ff-selects select:focus{outline:none;border-color:#2d3436}
 </style>
 </head>
 <body>
+<!-- Floating filter (appears on scroll) -->
+<div id="float-filter">
+  <div class="ff-title">📍 매장</div>
+  <div id="float-store-filters" style="display:flex;flex-direction:column;gap:4px"></div>
+  <div class="ff-divider"></div>
+  <div class="ff-title">📅 기간</div>
+  <div class="ff-selects">
+    <select id="float-month-from" onchange="syncFromFloat('from',this.value)">
+      <option value="">시작 월</option>
+    </select>
+    <select id="float-month-to" onchange="syncFromFloat('to',this.value)">
+      <option value="">종료 월</option>
+    </select>
+  </div>
+</div>
+
 <div class="wrap">
 
 <div class="hdr">
@@ -234,6 +277,11 @@ const DATA_BASE_URL = './data/'; // relative path for GitHub Pages
 
 // Available months - will be populated from manifest or manually
 let AVAILABLE_MONTHS = [];
+
+// 상품 카테고리 수동 오버라이드 (POS 분류 오류 보정)
+const CAT_OVERRIDE = {
+  '그린패스트볼': { cat_big: '음료', cat_mid: '음료', cat_small: '그린패스트볼' },
+};
 // State
 // ============================================================
 let selStores = new Set();
@@ -303,6 +351,16 @@ function renderFilters() {
     btns += `<div class="fbtn ${on?'active':''}" onclick="setStore('${s}')">${s}</div>`;
   });
   el.innerHTML = btns;
+  // sync floating panel store buttons
+  const fEl = document.getElementById('float-store-filters');
+  if (fEl) {
+    let fBtns = `<div class="fbtn ${allActive?'active':''}" onclick="setStore('전체')">전체</div>`;
+    STORES.filter(s=>s!=='전체').forEach(s=>{
+      const on = selStores.has(s);
+      fBtns += `<div class="fbtn ${on?'active':''}" onclick="setStore('${s}')">${s}</div>`;
+    });
+    fEl.innerHTML = fBtns;
+  }
 }
 function setStore(s) {
   if(s==='전체') { selStores.clear(); }
@@ -1146,8 +1204,10 @@ async function loadManifest() {
   const selTo   = document.getElementById('month-to');
 
   if (AVAILABLE_MONTHS.length > 0) {
+    const fSelFrom = document.getElementById('float-month-from');
+    const fSelTo   = document.getElementById('float-month-to');
     AVAILABLE_MONTHS.forEach(m => {
-      [selFrom, selTo].forEach(sel => {
+      [selFrom, selTo, fSelFrom, fSelTo].forEach(sel => {
         const opt = document.createElement('option');
         opt.value = m.file;
         opt.textContent = m.label;
@@ -1158,15 +1218,32 @@ async function loadManifest() {
     const latest = AVAILABLE_MONTHS[AVAILABLE_MONTHS.length - 1];
     selFrom.value = latest.file;
     selTo.value   = latest.file;
+    if(fSelFrom) fSelFrom.value = latest.file;
+    if(fSelTo)   fSelTo.value   = latest.file;
     loadRange(latest.file, latest.file);
   } else {
     document.getElementById('load-status').textContent = '\ub370\uc774\ud130 \ud30c\uc77c\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.';
   }
 }
 
+function syncFromFloat(which, val) {
+  const main = document.getElementById(which === 'from' ? 'month-from' : 'month-to');
+  if (main) { main.value = val; onRangeChange(); }
+}
+
+function syncFloatSelects() {
+  const f = document.getElementById('month-from').value;
+  const t = document.getElementById('month-to').value;
+  const ff = document.getElementById('float-month-from');
+  const ft = document.getElementById('float-month-to');
+  if (ff) ff.value = f;
+  if (ft) ft.value = t;
+}
+
 function onRangeChange() {
   const f = document.getElementById('month-from').value;
   const t = document.getElementById('month-to').value;
+  syncFloatSelects();
   if (!f || !t) return;
   // 드릴다운 열려있으면 저장 후 닫기 (새 데이터 로드 후 재오픈)
   const pendingDrill = currentDrillItem;
@@ -1205,7 +1282,10 @@ async function loadRange(fromFile, toFile) {
     // Merge — 실제 판매 데이터 있는 매장만 추출
     // 매장명 통일: '가산점' → '가산' (점 suffix 제거)
     const normStore = s => s.endsWith('점') ? s.slice(0, -1) : s;
-    const allItems = results.flatMap(d => d.items || []).map(r => ({...r, store: normStore(r.store)}));
+    const allItems = results.flatMap(d => d.items || []).map(r => {
+      const ov = CAT_OVERRIDE[r.item];
+      return ov ? {...r, store: normStore(r.store), ...ov} : {...r, store: normStore(r.store)};
+    });
     const activeStores = [...new Set(allItems.map(r => r.store))].sort();
 
     RAW = allItems;
@@ -1248,6 +1328,28 @@ async function loadRange(fromFile, toFile) {
 
 // Initialize
 loadManifest();
+
+// Floating filter panel scroll behavior
+(function() {
+  const filterPanel = document.getElementById('month-panel');
+  const storePanel  = filterPanel ? filterPanel.nextElementSibling : null;
+  const floatEl     = document.getElementById('float-filter');
+  if (!floatEl) return;
+
+  function checkScroll() {
+    const threshold = filterPanel
+      ? filterPanel.getBoundingClientRect().bottom
+      : 200;
+    if (threshold < 0) {
+      floatEl.classList.add('visible');
+    } else {
+      floatEl.classList.remove('visible');
+    }
+  }
+
+  window.addEventListener('scroll', checkScroll, { passive: true });
+  checkScroll();
+})();
 </script>
 </body>
 </html>
