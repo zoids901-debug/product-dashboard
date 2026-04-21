@@ -615,6 +615,7 @@ async function showDrill(itemName, catBig) {
 
   const labels = [], fullDates = [], qtyData = [], netData = [];
   let totalQty = 0, totalNet = 0;
+  const storeQty = {};
 
   for (const res of fetched) {
     if (!res) continue;
@@ -623,11 +624,13 @@ async function showDrill(itemName, catBig) {
       const normS = store.endsWith('점') ? store.slice(0,-1) : store;
       if (useStores && !useStores.includes(normS)) continue;
       for (const it of items)
-        if (it.item === itemName) { qty += it.qty; net += it.net; }
+        if (it.item === itemName) {
+          qty += it.qty; net += it.net;
+          storeQty[normS] = (storeQty[normS] || 0) + it.qty;
+        }
     }
-    // 판매 없어도 날짜는 포함 (0으로)
     const dt = new Date(res.date);
-    const dow = dt.getDay(); // 0=일, 6=토
+    const dow = dt.getDay();
     const label = res.date.slice(5) + (dow===0?' 일':dow===6?' 토':'');
     labels.push(label);
     fullDates.push({ date: res.date, dow });
@@ -636,12 +639,17 @@ async function showDrill(itemName, catBig) {
     totalQty += qty; totalNet += net;
   }
 
+  const sellingStores = Object.entries(storeQty)
+    .sort((a,b) => b[1]-a[1])
+    .map(([s,q]) => `${s} ${comma(q)}${unit}`)
+    .join(' · ');
+
   // 주말 인덱스
   const weekendIndices = fullDates.map((d,i) => d.dow===0||d.dow===6 ? i : -1).filter(i=>i>=0);
 
   document.getElementById('drill-sub').textContent =
     labels.length
-      ? `총 ${comma(totalQty)}${unit} · ${M(totalNet)}`
+      ? `총 ${comma(totalQty)}${unit} · ${M(totalNet)}　｜　${sellingStores}`
       : '해당 기간 일별 파일 미수집';
 
   if (drillChart) { drillChart.destroy(); drillChart = null; }
