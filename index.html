@@ -251,7 +251,7 @@ tr:hover td{background:#f8f9fb}
 
 <!-- 매장별 TOP 메뉴 -->
 <div class="card">
-  <h2>매장별 TOP 10 메뉴</h2>
+  <h2>매장별 메뉴 전체</h2>
   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <div style="display:flex;gap:6px" id="top-cat-filters"></div>
     <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
@@ -985,7 +985,7 @@ function updateStoreTops() {
     }
 
     const sk = topSort;
-    const top = itemList.sort((a,b)=>b[sk]-a[sk]).slice(0,10);
+    const top = itemList.sort((a,b)=>b[sk]-a[sk]);
 
     html += `<div><div style="font-size:13px;font-weight:700;margin-bottom:8px">${store}`;
     if(excludedNames.size>0) html += ` <span style="font-size:10px;font-weight:400;color:#b2bec3">(${excludedNames.size}개 제외)</span>`;
