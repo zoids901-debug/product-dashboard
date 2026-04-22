@@ -293,6 +293,7 @@ let catExpanded = {};
 // ABC 필터 상태
 let abcCatBig = '전체';
 let abcCatMid = '전체';
+let abcCatSmall = '전체';
 let abcSort = 'net';
 
 // 드릴다운 상태
@@ -517,8 +518,9 @@ function renderFilterBtns(containerId, options, selected, onClickFn) {
   el.innerHTML = options.map(o=>`<div class="fbtn${o===selected?' active':''}" onclick="${onClickFn}('${o}')" style="padding:4px 12px;font-size:11px">${o}</div>`).join('');
 }
 
-function setAbcBig(v) { abcCatBig=v; abcCatMid='전체'; updateABC(); }
-function setAbcMid(v) { abcCatMid=v; updateABC(); }
+function setAbcBig(v) { abcCatBig=v; abcCatMid='전체'; abcCatSmall='전체'; updateABC(); }
+function setAbcMid(v) { abcCatMid=v; abcCatSmall='전체'; updateABC(); }
+function setAbcSmall(v) { abcCatSmall=v; updateABC(); }
 function setAbcSort(v) { abcSort=v; updateABC(); }
 function toggleAbcExclude() { abcExcludeOutlier=!abcExcludeOutlier; updateABC(); }
 function setTopBig(v) { topCatBig=v; topCatMid='전체'; updateStoreTops(); }
@@ -536,12 +538,23 @@ function updateABC() {
   const bigOpts = ['전체',...BIG_ORDER.filter(b=>d.some(r=>r.cat_big===b))];
   renderFilterBtns('abc-cat-filters', bigOpts, abcCatBig, 'setAbcBig');
 
-  // 대분류 선택 시 중분류 필터
+  // 중분류 필터
   const midOpts = getAvailableMids(d, abcCatBig);
+  const el = document.getElementById('abc-cat-filters');
   if(abcCatBig!=='전체' && midOpts.length>2) {
-    const el = document.getElementById('abc-cat-filters');
     el.innerHTML += '<span style="color:#ccc;margin:0 4px">|</span>';
     el.innerHTML += midOpts.map(o=>`<div class="fbtn${o===abcCatMid?' active':''}" onclick="setAbcMid('${o}')" style="padding:4px 12px;font-size:11px">${o}</div>`).join('');
+  }
+
+  // 소분류 필터
+  let dForSmall = d;
+  if(abcCatBig!=='전체') dForSmall = dForSmall.filter(r=>r.cat_big===abcCatBig);
+  if(abcCatMid!=='전체') dForSmall = dForSmall.filter(r=>r.cat_mid===abcCatMid);
+  const smallOpts = ['전체', ...new Set(dForSmall.map(r=>r.cat_small).filter(Boolean))].sort((a,b)=>a==='전체'?-1:b==='전체'?1:a.localeCompare(b,'ko'));
+  if(abcCatBig!=='전체' && smallOpts.length>2) {
+    el.innerHTML += '<span style="color:#ccc;margin:0 4px">|</span>';
+    el.innerHTML += `<span style="font-size:10px;color:#aaa;margin-right:2px">소분류</span>`;
+    el.innerHTML += smallOpts.map(o=>`<div class="fbtn${o===abcCatSmall?' active':''}" onclick="setAbcSmall('${o.replace(/'/g,"\\'")}')  " style="padding:4px 10px;font-size:11px">${o}</div>`).join('');
   }
 
   // 정렬 버튼
@@ -554,6 +567,7 @@ function updateABC() {
   let fd = d;
   if(abcCatBig!=='전체') fd = fd.filter(r=>r.cat_big===abcCatBig);
   if(abcCatMid!=='전체') fd = fd.filter(r=>r.cat_mid===abcCatMid);
+  if(abcCatSmall!=='전체') fd = fd.filter(r=>r.cat_small===abcCatSmall);
 
   const totalNet = fd.reduce((s,r)=>s+r.net,0);
   const totalQty = fd.reduce((s,r)=>s+r.qty,0);
@@ -561,7 +575,7 @@ function updateABC() {
   // 아이템별 집계
   const items = {};
   fd.forEach(r=>{
-    if(!items[r.item]) items[r.item]={item:r.item,cat_big:r.cat_big,cat_mid:r.cat_mid,qty:0,net:0};
+    if(!items[r.item]) items[r.item]={item:r.item,cat_big:r.cat_big,cat_mid:r.cat_mid,cat_small:r.cat_small||'',qty:0,net:0};
     items[r.item].qty+=r.qty;
     items[r.item].net+=r.net;
   });
@@ -583,7 +597,7 @@ function updateABC() {
   const cntEl = document.getElementById('abc-search-count');
   if(cntEl) cntEl.textContent = q ? matchCount+'개 매칭' : '';
 
-  let h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th></tr></thead><tbody>`;
+  let h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th>소분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th></tr></thead><tbody>`;
   sorted.forEach((i,idx)=>{
     const rc = i.rank==='A'?'rank-a':i.rank==='B'?'rank-b':'rank-c';
     const isMatch = q && i.item.toLowerCase().includes(q);
@@ -592,7 +606,7 @@ function updateABC() {
     const itemEsc = i.item.replace(/'/g,"\\'");
     const catEsc = i.cat_big.replace(/'/g,"\\'");
     h += `<tr style="${rowStyle};cursor:pointer" onclick="showDrill('${itemEsc}','${catEsc}')" title="클릭하면 일별 판매 추이 보기">
-      <td>${idx+1}</td><td style="color:#0984e3;text-decoration:underline dotted">${i.item}</td><td>${i.cat_big}</td><td>${i.cat_mid}</td>
+      <td>${idx+1}</td><td style="color:#0984e3;text-decoration:underline dotted">${i.item}</td><td>${i.cat_big}</td><td>${i.cat_mid}</td><td>${i.cat_small||''}</td>
       <td class="r">${comma(i.qty)}</td><td class="r">${M(i.net)}</td>
       <td class="r">${i.pct.toFixed(1)}%</td><td class="r">${i.cum.toFixed(1)}%</td>
       <td class="${rc}">${i.rank}</td>
