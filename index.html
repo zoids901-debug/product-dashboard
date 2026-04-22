@@ -550,7 +550,9 @@ function updateABC() {
   let dForSmall = d;
   if(abcCatBig!=='전체') dForSmall = dForSmall.filter(r=>r.cat_big===abcCatBig);
   if(abcCatMid!=='전체') dForSmall = dForSmall.filter(r=>r.cat_mid===abcCatMid);
-  const smallOpts = ['전체', ...new Set(dForSmall.map(r=>r.cat_small).filter(Boolean))].sort((a,b)=>a==='전체'?-1:b==='전체'?1:a.localeCompare(b,'ko'));
+  const smallNet = {};
+  dForSmall.forEach(r=>{ if(r.cat_small) smallNet[r.cat_small]=(smallNet[r.cat_small]||0)+r.net; });
+  const smallOpts = ['전체', ...Object.keys(smallNet).sort((a,b)=>smallNet[b]-smallNet[a])];
   if(abcCatBig!=='전체' && smallOpts.length>2) {
     el.innerHTML += '<span style="color:#ccc;margin:0 4px">|</span>';
     el.innerHTML += `<span style="font-size:10px;color:#aaa;margin-right:2px">소분류</span>`;
