@@ -1003,19 +1003,23 @@ function updateABC() {
   }
 
   // 워스트 필터: 추세 -25%+ AND 카테고리 일평균 P25 미만
-  if (abcWorstOnly && canTrend) {
-    // 카테고리(현재 필터 결과)의 P25 일평균 계산
-    const cat_avgs = Object.values(items).filter(i=>i.recentDailyAvg>0).map(i=>i.recentDailyAvg).sort((a,b)=>a-b);
-    const p25 = cat_avgs.length>=4 ? cat_avgs[Math.floor(cat_avgs.length*0.25)] : 0;
-    Object.keys(items).forEach(k=>{
-      const i = items[k];
-      const meetsDecline = i.trendPct !== null && i.trendPct <= -25;
-      const meetsP25 = i.recentDailyAvg < p25;
-      const seasonalEnded = i.qSecond === 0 && i.qFirst > 5; // 시즌 종료 의심 (제외)
-      if (!(meetsDecline && meetsP25) || seasonalEnded) {
-        delete items[k];
-      }
-    });
+  if (abcWorstOnly) {
+    if (!canTrend) {
+      // 1개월 이하 선택 시 추세 못 계산 → 모든 아이템 비우기
+      Object.keys(items).forEach(k=>delete items[k]);
+    } else {
+      const cat_avgs = Object.values(items).filter(i=>i.recentDailyAvg>0).map(i=>i.recentDailyAvg).sort((a,b)=>a-b);
+      const p25 = cat_avgs.length>=4 ? cat_avgs[Math.floor(cat_avgs.length*0.25)] : 0;
+      Object.keys(items).forEach(k=>{
+        const i = items[k];
+        const meetsDecline = i.trendPct !== null && i.trendPct <= -25;
+        const meetsP25 = i.recentDailyAvg < p25;
+        const seasonalEnded = i.qSecond === 0 && i.qFirst > 5;
+        if (!(meetsDecline && meetsP25) || seasonalEnded) {
+          delete items[k];
+        }
+      });
+    }
   }
 
   const sortKey = abcSort;
@@ -1050,7 +1054,13 @@ function updateABC() {
   if(cntEl) cntEl.textContent = q ? matchCount+'개 매칭' : '';
 
   const trendCol = canTrend ? '<th class="r" title="기간 전반 vs 후반 일평균 변화">추세</th>' : '';
-  let h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th>소분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th>${trendCol}</tr></thead><tbody>`;
+  let h = '';
+  if (abcWorstOnly && !canTrend) {
+    h += `<tbody><tr><td colspan="10" style="text-align:center;padding:24px;color:#e17055;font-weight:600;background:#fff5f0">⚠️ 워스트 분석은 2개월 이상 기간 선택이 필요합니다. 상단에서 시작/종료 월을 다르게 설정해주세요.</td></tr></tbody>`;
+    document.getElementById('tbl-abc').innerHTML = h;
+    return;
+  }
+  h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th>소분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th>${trendCol}</tr></thead><tbody>`;
 
   sorted.forEach((i,idx)=>{
     const rc = i.rank==='A'?'rank-a':i.rank==='B'?'rank-b':'rank-c';
