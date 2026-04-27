@@ -494,6 +494,7 @@ let catExpanded = {};
 
 let abcCatBig = '전체';
 let abcWorstOnly = false;
+let ENDED_ITEMS = new Set();  // 단종 상품 (10일 무판매)
 
 let abcCatMid = '전체';
 
@@ -1014,8 +1015,8 @@ function updateABC() {
         const i = items[k];
         const meetsDecline = i.trendPct !== null && i.trendPct <= -25;
         const meetsP25 = i.recentDailyAvg < p25;
-        const seasonalEnded = i.qSecond === 0 && i.qFirst > 5;
-        if (!(meetsDecline && meetsP25) || seasonalEnded) {
+        const isEnded = ENDED_ITEMS.has(i.item);  // 10일 무판매 = 단종
+        if (!(meetsDecline && meetsP25) || isEnded) {
           delete items[k];
         }
       });
@@ -2305,6 +2306,16 @@ async function loadManifest() {
     console.log('No manifest found');
 
   }
+
+  // 단종 상품 리스트 로드
+  try {
+    const r2 = await fetch(DATA_BASE_URL + 'ended_items.json');
+    if (r2.ok) {
+      const ej = await r2.json();
+      ENDED_ITEMS = new Set(ej.ended || []);
+      console.log('단종 상품:', ENDED_ITEMS.size, '개');
+    }
+  } catch(e) { console.log('No ended_items.json'); }
 
   const selFrom = document.getElementById('month-from');
 
