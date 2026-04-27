@@ -493,6 +493,7 @@ let catExpanded = {};
 // ABC 필터 상태
 
 let abcCatBig = '전체';
+let abcWorstOnly = false;
 
 let abcCatMid = '전체';
 
@@ -876,6 +877,7 @@ function setAbcMid(v) { abcCatMid=v; abcCatSmall='전체'; updateABC(); }
 function setAbcSmall(v) { abcCatSmall=v; updateABC(); }
 
 function setAbcSort(v) { abcSort=v; updateABC(); }
+function toggleAbcWorst() { abcWorstOnly=!abcWorstOnly; updateABC(); }
 
 function toggleAbcExclude() { abcExcludeOutlier=!abcExcludeOutlier; updateABC(); }
 
@@ -944,11 +946,9 @@ function updateABC() {
   // 정렬 버튼
 
   document.getElementById('abc-sort-btns').innerHTML = `
-
     <div class="fbtn${abcSort==='net'?' active':''}" onclick="setAbcSort('net')" style="padding:4px 12px;font-size:11px">매출 기준</div>
-
     <div class="fbtn${abcSort==='qty'?' active':''}" onclick="setAbcSort('qty')" style="padding:4px 12px;font-size:11px">수량 기준</div>
-
+    <div class="fbtn${abcWorstOnly?' active':''}" onclick="toggleAbcWorst()" style="padding:4px 12px;font-size:11px;margin-left:6px;color:${abcWorstOnly?'#fff':'#e17055'};${abcWorstOnly?'background:#e17055;border-color:#e17055':'border-color:#e17055'}" title="추세 하락 -25%+ AND 카테고리 하위 25% 미만">🔻 워스트만</div>
   `;
 
   // 필터 적용
@@ -965,25 +965,65 @@ function updateABC() {
 
   const totalQty = fd.reduce((s,r)=>s+r.qty,0);
 
-  // 아이템별 집계
+  // 기간 절반 분할 (추세 분석용)
+  const monthFiles = LOADED_MONTHS.map(m=>m.file);
+  const half = Math.ceil(monthFiles.length/2);
+  const firstHalf = new Set(monthFiles.slice(0, half));
+  const secondHalf = new Set(monthFiles.slice(half));
+  // 일수 보정
+  const monthDays = (f) => {
+    const yy = 2000 + parseInt(f.slice(0,2));
+    const mm = parseInt(f.slice(2,4));
+    if (yy === 2026 && mm === 4) return 26;  // 4월은 진행 중
+    return new Date(yy, mm, 0).getDate();
+  };
+  const firstDays = monthFiles.slice(0, half).reduce((s,f)=>s+monthDays(f), 0);
+  const secondDays = monthFiles.slice(half).reduce((s,f)=>s+monthDays(f), 0);
+  const canTrend = monthFiles.length >= 2 && firstDays > 0 && secondDays > 0;
 
+  // 아이템별 집계 + 전반/후반 분할
   const items = {};
-
   fd.forEach(r=>{
-
-    if(!items[r.item]) items[r.item]={item:r.item,cat_big:r.cat_big,cat_mid:r.cat_mid,cat_small:r.cat_small||'',qty:0,net:0};
-
+    if(!items[r.item]) items[r.item]={item:r.item,cat_big:r.cat_big,cat_mid:r.cat_mid,cat_small:r.cat_small||'',qty:0,net:0,qFirst:0,qSecond:0};
     items[r.item].qty+=r.qty;
-
     items[r.item].net+=r.net;
-
+    if (canTrend) {
+      if (firstHalf.has(r.month)) items[r.item].qFirst += r.qty;
+      else if (secondHalf.has(r.month)) items[r.item].qSecond += r.qty;
+    }
   });
+  // 추세 % 계산 (일평균 기준)
+  if (canTrend) {
+    Object.values(items).forEach(i=>{
+      const fa = i.qFirst/firstDays;
+      const sa = i.qSecond/secondDays;
+      i.trendPct = fa>0 ? (sa-fa)/fa*100 : null;
+      i.recentDailyAvg = sa;
+    });
+  }
+
+  // 워스트 필터: 추세 -25%+ AND 카테고리 일평균 P25 미만
+  if (abcWorstOnly && canTrend) {
+    // 카테고리(현재 필터 결과)의 P25 일평균 계산
+    const cat_avgs = Object.values(items).filter(i=>i.recentDailyAvg>0).map(i=>i.recentDailyAvg).sort((a,b)=>a-b);
+    const p25 = cat_avgs.length>=4 ? cat_avgs[Math.floor(cat_avgs.length*0.25)] : 0;
+    Object.keys(items).forEach(k=>{
+      const i = items[k];
+      const meetsDecline = i.trendPct !== null && i.trendPct <= -25;
+      const meetsP25 = i.recentDailyAvg < p25;
+      const seasonalEnded = i.qSecond === 0 && i.qFirst > 5; // 시즌 종료 의심 (제외)
+      if (!(meetsDecline && meetsP25) || seasonalEnded) {
+        delete items[k];
+      }
+    });
+  }
 
   const sortKey = abcSort;
-
   const totalBase = sortKey==='net'?totalNet:totalQty;
-
-  const sorted = Object.values(items).filter(i=>i[sortKey]>0).sort((a,b)=>b[sortKey]-a[sortKey]);
+  const sorted = Object.values(items).filter(i=>i[sortKey]>0).sort((a,b) => {
+    if (abcWorstOnly) return (a.trendPct ?? 0) - (b.trendPct ?? 0);  // 워스트는 하락률 오름차순
+    return b[sortKey]-a[sortKey];
+  });
 
   let cum = 0;
 
@@ -1009,34 +1049,35 @@ function updateABC() {
 
   if(cntEl) cntEl.textContent = q ? matchCount+'개 매칭' : '';
 
-  let h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th>소분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th></tr></thead><tbody>`;
+  const trendCol = canTrend ? '<th class="r" title="기간 전반 vs 후반 일평균 변화">추세</th>' : '';
+  let h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th>소분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th>${trendCol}</tr></thead><tbody>`;
 
   sorted.forEach((i,idx)=>{
-
     const rc = i.rank==='A'?'rank-a':i.rank==='B'?'rank-b':'rank-c';
-
     const isMatch = q && i.item.toLowerCase().includes(q);
-
     const isDim   = q && !isMatch;
-
     const rowStyle = isMatch ? 'background:#fff9c4;font-weight:600' : isDim ? 'opacity:0.25' : '';
-
     const itemEsc = i.item.replace(/'/g,"\\'");
-
     const catEsc = i.cat_big.replace(/'/g,"\\'");
 
+    let trendCell = '';
+    if (canTrend) {
+      if (i.trendPct === null) trendCell = '<td class="r" style="color:#aaa">-</td>';
+      else {
+        const t = i.trendPct;
+        const color = t <= -25 ? '#e17055' : t <= -10 ? '#fdcb6e' : t >= 10 ? '#00b894' : '#888';
+        const weight = Math.abs(t) >= 25 ? '700' : '500';
+        const sign = t > 0 ? '+' : '';
+        trendCell = `<td class="r" style="color:${color};font-weight:${weight}">${sign}${t.toFixed(0)}%</td>`;
+      }
+    }
+
     h += `<tr style="${rowStyle};cursor:pointer" onclick="showDrill('${itemEsc}','${catEsc}')" title="클릭하면 일별 판매 추이 보기">
-
       <td>${idx+1}</td><td style="color:#0984e3;text-decoration:underline dotted">${i.item}</td><td>${i.cat_big}</td><td>${i.cat_mid}</td><td>${i.cat_small||''}</td>
-
       <td class="r">${comma(i.qty)}</td><td class="r">${M(i.net)}</td>
-
       <td class="r">${i.pct.toFixed(1)}%</td><td class="r">${i.cum.toFixed(1)}%</td>
-
-      <td class="${rc}">${i.rank}</td>
-
+      <td class="${rc}">${i.rank}</td>${trendCell}
     </tr>`;
-
   });
 
   h += '</tbody>';
@@ -2358,13 +2399,12 @@ async function loadRange(fromFile, toFile) {
 
     const normStore = s => s.endsWith('점') ? s.slice(0, -1) : s;
 
-    const allItems = results.flatMap(d => d.items || []).map(r => {
-
-      const ov = CAT_OVERRIDE[r.item];
-
-      return ov ? {...r, store: normStore(r.store), ...ov} : {...r, store: normStore(r.store)};
-
-    });
+    // 각 row에 month 정보 부착 (워스트 추세 분석용)
+    const allItems = results.flatMap((d, idx) => (d.items || []).map(r => ({...r, month: months[idx].file})))
+      .map(r => {
+        const ov = CAT_OVERRIDE[r.item];
+        return ov ? {...r, store: normStore(r.store), ...ov} : {...r, store: normStore(r.store)};
+      });
 
     const activeStores = [...new Set(allItems.map(r => r.store))].sort();
 
