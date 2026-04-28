@@ -513,7 +513,7 @@ let currentDrillItem = null;
 
 let currentDrillCat = '';
 
-let abcExcludeOutlier = false;
+let abcExcludeOutlier = true;
 
 let abcSearch = '';
 
@@ -950,6 +950,7 @@ function updateABC() {
   document.getElementById('abc-sort-btns').innerHTML = `
     <div class="fbtn${abcSort==='net'?' active':''}" onclick="setAbcSort('net')" style="padding:4px 12px;font-size:11px">매출 기준</div>
     <div class="fbtn${abcSort==='qty'?' active':''}" onclick="setAbcSort('qty')" style="padding:4px 12px;font-size:11px">수량 기준</div>
+    <div class="fbtn${abcExcludeOutlier?' active':''}" id="abc-excl-btn" onclick="toggleAbcExclude()" style="padding:4px 12px;font-size:11px;margin-left:6px" title="IQR 기반 상위 이상치 자동 제외 (수량/건당매출)">상위 이상치 제외</div>
     <div class="fbtn${abcWorstOnly?' active':''}" onclick="toggleAbcWorst()" style="padding:4px 12px;font-size:11px;margin-left:6px;color:${abcWorstOnly?'#fff':'#e17055'};${abcWorstOnly?'background:#e17055;border-color:#e17055':'border-color:#e17055'}" title="추세 하락 -25%+ AND 카테고리 하위 25% 미만">🔻 워스트만</div>
   `;
 
@@ -1024,8 +1025,25 @@ function updateABC() {
     }
   }
 
+  // 이상치 감지 (IQR 기반: 수량/건당매출)
+  const itemArr = Object.values(items).filter(i=>i.qty>0&&i.net>0);
+  itemArr.forEach(i=>{ i.avg = Math.floor(i.net/i.qty); });
+  const abcOutlierSet = (!abcWorstOnly && abcExcludeOutlier) ? detectOutliers(itemArr) : new Set();
+  // 버튼 라벨 갱신
+  const abcExBtn = document.getElementById('abc-excl-btn');
+  if (abcExBtn) {
+    abcExBtn.className = 'fbtn' + (abcExcludeOutlier?' active':'');
+    abcExBtn.textContent = abcOutlierSet.size>0 ? `상위 이상치 제외 (${abcOutlierSet.size}개)` : '상위 이상치 제외';
+  }
+  if (abcOutlierSet.size > 0) {
+    abcOutlierSet.forEach(nm => delete items[nm]);
+  }
+
   const sortKey = abcSort;
-  const totalBase = sortKey==='net'?totalNet:totalQty;
+  // 이상치 제외 후 합계 재계산 (비중 왜곡 방지)
+  const filteredTotalNet = Object.values(items).reduce((s,i)=>s+i.net,0);
+  const filteredTotalQty = Object.values(items).reduce((s,i)=>s+i.qty,0);
+  const totalBase = sortKey==='net'?filteredTotalNet:filteredTotalQty;
   const sorted = Object.values(items).filter(i=>i[sortKey]>0).sort((a,b) => {
     if (abcWorstOnly) return (a.trendPct ?? 0) - (b.trendPct ?? 0);  // 워스트는 하락률 오름차순
     return b[sortKey]-a[sortKey];
