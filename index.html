@@ -495,6 +495,7 @@ let catExpanded = {};
 let abcCatBig = '전체';
 let abcWorstOnly = false;
 let ENDED_ITEMS = new Set();  // 단종 상품 (10일 무판매)
+let PRICE_MAP = {};  // 상품명 → 판매가 (POS 정가)
 
 let abcCatMid = '전체';
 
@@ -1055,13 +1056,14 @@ function updateABC() {
   if(cntEl) cntEl.textContent = q ? matchCount+'개 매칭' : '';
 
   const trendCol = canTrend ? '<th class="r" title="기간 전반 vs 후반 일평균 변화">추세</th>' : '';
+  const priceCol = '<th class="r" title="POS 등록 판매가 (정가)">단가</th>';
   let h = '';
   if (abcWorstOnly && !canTrend) {
-    h += `<tbody><tr><td colspan="10" style="text-align:center;padding:24px;color:#e17055;font-weight:600;background:#fff5f0">⚠️ 워스트 분석은 2개월 이상 기간 선택이 필요합니다. 상단에서 시작/종료 월을 다르게 설정해주세요.</td></tr></tbody>`;
+    h += `<tbody><tr><td colspan="11" style="text-align:center;padding:24px;color:#e17055;font-weight:600;background:#fff5f0">⚠️ 워스트 분석은 2개월 이상 기간 선택이 필요합니다. 상단에서 시작/종료 월을 다르게 설정해주세요.</td></tr></tbody>`;
     document.getElementById('tbl-abc').innerHTML = h;
     return;
   }
-  h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th>소분류</th><th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th>${trendCol}</tr></thead><tbody>`;
+  h = `<thead><tr><th>#</th><th>상품명</th><th>대분류</th><th>중분류</th><th>소분류</th>${priceCol}<th class="r">수량</th><th class="r">실매출</th><th class="r">비중(${sortLabel})</th><th class="r">누적</th><th>등급</th>${trendCol}</tr></thead><tbody>`;
 
   sorted.forEach((i,idx)=>{
     const rc = i.rank==='A'?'rank-a':i.rank==='B'?'rank-b':'rank-c';
@@ -1083,8 +1085,12 @@ function updateABC() {
       }
     }
 
+    const price = PRICE_MAP[i.item];
+    const priceCell = price ? `<td class="r">${comma(price)}원</td>` : `<td class="r" style="color:#bbb">-</td>`;
+
     h += `<tr style="${rowStyle};cursor:pointer" onclick="showDrill('${itemEsc}','${catEsc}')" title="클릭하면 일별 판매 추이 보기">
       <td>${idx+1}</td><td style="color:#0984e3;text-decoration:underline dotted">${i.item}</td><td>${i.cat_big}</td><td>${i.cat_mid}</td><td>${i.cat_small||''}</td>
+      ${priceCell}
       <td class="r">${comma(i.qty)}</td><td class="r">${M(i.net)}</td>
       <td class="r">${i.pct.toFixed(1)}%</td><td class="r">${i.cum.toFixed(1)}%</td>
       <td class="${rc}">${i.rank}</td>${trendCell}
@@ -2316,6 +2322,16 @@ async function loadManifest() {
       console.log('단종 상품:', ENDED_ITEMS.size, '개');
     }
   } catch(e) { console.log('No ended_items.json'); }
+
+  // 상품 단가 로드 (POS 정가)
+  try {
+    const r3 = await fetch(DATA_BASE_URL + 'prices.json');
+    if (r3.ok) {
+      const pj = await r3.json();
+      PRICE_MAP = pj.by_name || {};
+      console.log('단가 로드:', Object.keys(PRICE_MAP).length, '개');
+    }
+  } catch(e) { console.log('No prices.json'); }
 
   const selFrom = document.getElementById('month-from');
 
