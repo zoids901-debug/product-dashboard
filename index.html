@@ -1025,15 +1025,21 @@ function updateABC() {
     }
   }
 
-  // 이상치 감지 (IQR 기반: 수량/건당매출)
-  const itemArr = Object.values(items).filter(i=>i.qty>0&&i.net>0);
-  itemArr.forEach(i=>{ i.avg = Math.floor(i.net/i.qty); });
-  const abcOutlierSet = (!abcWorstOnly && abcExcludeOutlier) ? detectOutliers(itemArr) : new Set();
-  // 버튼 라벨 갱신
+  // 베이스 메뉴 제외: 이름에 '아메리카노' 또는 '라떼'(라때) 포함
+  const ABC_BASE_PATTERNS = ['아메리카노','라떼','라때'];
+  const abcOutlierSet = new Set();
+  if (!abcWorstOnly && abcExcludeOutlier) {
+    Object.keys(items).forEach(nm => {
+      if (ABC_BASE_PATTERNS.some(p => nm.includes(p))) abcOutlierSet.add(nm);
+    });
+  }
   const abcExBtn = document.getElementById('abc-excl-btn');
   if (abcExBtn) {
     abcExBtn.className = 'fbtn' + (abcExcludeOutlier?' active':'');
-    abcExBtn.textContent = abcOutlierSet.size>0 ? `상위 이상치 제외 (${abcOutlierSet.size}개)` : '상위 이상치 제외';
+    abcExBtn.title = '이름에 아메리카노/라떼 포함된 베이스 메뉴 제외';
+    abcExBtn.textContent = abcOutlierSet.size>0
+      ? `아메리카노·라떼 제외 (${abcOutlierSet.size}개)`
+      : '아메리카노·라떼 제외';
   }
   if (abcOutlierSet.size > 0) {
     abcOutlierSet.forEach(nm => delete items[nm]);
