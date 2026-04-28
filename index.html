@@ -1025,21 +1025,17 @@ function updateABC() {
     }
   }
 
-  // 베이스 메뉴 제외: 이름에 '아메리카노' 또는 '라떼'(라때) 포함
-  const ABC_BASE_PATTERNS = ['아메리카노','라떼','라때'];
-  const abcOutlierSet = new Set();
-  if (!abcWorstOnly && abcExcludeOutlier) {
-    Object.keys(items).forEach(nm => {
-      if (ABC_BASE_PATTERNS.some(p => nm.includes(p))) abcOutlierSet.add(nm);
-    });
-  }
+  // 상위 이상치(베이스 메뉴) 제외 — detectOutliers 통합 사용
+  const abcOutlierSet = (!abcWorstOnly && abcExcludeOutlier)
+    ? detectOutliers(Object.values(items))
+    : new Set();
   const abcExBtn = document.getElementById('abc-excl-btn');
   if (abcExBtn) {
     abcExBtn.className = 'fbtn' + (abcExcludeOutlier?' active':'');
-    abcExBtn.title = '이름에 아메리카노/라떼 포함된 베이스 메뉴 제외';
+    abcExBtn.title = '아메리카노/라떼 등 베이스 메뉴 자동 제외';
     abcExBtn.textContent = abcOutlierSet.size>0
-      ? `아메리카노·라떼 제외 (${abcOutlierSet.size}개)`
-      : '아메리카노·라떼 제외';
+      ? `상위 이상치 제외 (${abcOutlierSet.size}개)`
+      : '상위 이상치 제외';
   }
   if (abcOutlierSet.size > 0) {
     abcOutlierSet.forEach(nm => delete items[nm]);
@@ -1891,70 +1887,15 @@ function toggleMxExcludeItem(name) {
 
 }
 
-// IQR 기반 이상치 감지: 수량 또는 건당매출 기준으로 상위 이상치 자동 탐지
-
+// 베이스 메뉴 감지: 이름에 '아메리카노' 또는 '라떼/라때' 포함된 상품을 이상치로 처리
+const BASE_MENU_PATTERNS = ['아메리카노','라떼','라때'];
 function detectOutliers(itemList) {
-
-  if(itemList.length < 5) return new Set();
-
-  const outlierNames = new Set();
-
-  // 수량 기준 이상치
-
-  const qtyArr = itemList.map(i=>i.qty).sort((a,b)=>a-b);
-
-  const q1Qty = qtyArr[Math.floor(qtyArr.length*0.25)];
-
-  const q3Qty = qtyArr[Math.floor(qtyArr.length*0.75)];
-
-  const iqrQty = q3Qty - q1Qty;
-
-  const upperQty = q3Qty + iqrQty * 2.5; // 2.5배 IQR → 극단적 이상치만
-
-  // 건당매출 기준 이상치
-
-  const avgArr = itemList.map(i=>i.avg).sort((a,b)=>a-b);
-
-  const q1Avg = avgArr[Math.floor(avgArr.length*0.25)];
-
-  const q3Avg = avgArr[Math.floor(avgArr.length*0.75)];
-
-  const iqrAvg = q3Avg - q1Avg;
-
-  const upperAvg = q3Avg + iqrAvg * 2.5;
-
-  itemList.forEach(i=>{
-
-    // 수량이 극단적으로 높거나, 건당매출이 극단적으로 높은 경우
-
-    if(i.qty > upperQty || i.avg > upperAvg) {
-
-      outlierNames.add(i.item);
-
-    }
-
+  const out = new Set();
+  itemList.forEach(i => {
+    const nm = i.item || '';
+    if (BASE_MENU_PATTERNS.some(p => nm.includes(p))) out.add(nm);
   });
-
-  // 추가: 수량이 2위 대비 3배 이상 차이나는 1위도 이상치로 간주
-
-  const byQty = [...itemList].sort((a,b)=>b.qty-a.qty);
-
-  if(byQty.length>=2 && byQty[0].qty >= byQty[1].qty*3) {
-
-    outlierNames.add(byQty[0].item);
-
-  }
-
-  const byAvg = [...itemList].sort((a,b)=>b.avg-a.avg);
-
-  if(byAvg.length>=2 && byAvg[0].avg >= byAvg[1].avg*3) {
-
-    outlierNames.add(byAvg[0].item);
-
-  }
-
-  return outlierNames;
-
+  return out;
 }
 
 function updateMatrix() {
