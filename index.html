@@ -1887,8 +1887,12 @@ function toggleMxExcludeItem(name) {
 
 }
 
-// 베이스 메뉴 감지: 이름에 '아메리카노' 또는 '라떼/라때' 포함된 상품을 이상치로 처리
-const BASE_MENU_PATTERNS = ['아메리카노','라떼','라때'];
+// 베이스 메뉴 감지: 아메리카노 + 카페라떼/바닐라빈라떼 변종만 (시그니처 라떼는 제외 안 함)
+const BASE_MENU_PATTERNS = [
+  '아메리카노',
+  '카페 라떼','카페라떼','카페 라때','카페라때',
+  '바닐라빈 라떼','바닐라빈라떼','바닐라빈 라때','바닐라빈라때',
+];
 function detectOutliers(itemList) {
   const out = new Set();
   itemList.forEach(i => {
