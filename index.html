@@ -1887,17 +1887,24 @@ function toggleMxExcludeItem(name) {
 
 }
 
-// 베이스 메뉴 감지: 아메리카노 + 카페라떼/바닐라빈라떼 변종만 (시그니처 라떼는 제외 안 함)
+// 베이스 메뉴 감지: 아메리카노 + 카페라떼/바닐라빈라떼 변종 (이름 매칭 AND 비중 2.5%+)
 const BASE_MENU_PATTERNS = [
   '아메리카노',
   '카페 라떼','카페라떼','카페 라때','카페라때',
   '바닐라빈 라떼','바닐라빈라떼','바닐라빈 라때','바닐라빈라때',
 ];
+const BASE_MENU_SHARE_THRESHOLD = 2.5; // 매출/수량 비중 중 큰 값 기준
 function detectOutliers(itemList) {
+  const totalNet = itemList.reduce((s,i)=>s+(i.net||0), 0);
+  const totalQty = itemList.reduce((s,i)=>s+(i.qty||0), 0);
+  if (totalNet<=0 && totalQty<=0) return new Set();
   const out = new Set();
   itemList.forEach(i => {
     const nm = i.item || '';
-    if (BASE_MENU_PATTERNS.some(p => nm.includes(p))) out.add(nm);
+    if (!BASE_MENU_PATTERNS.some(p => nm.includes(p))) return;
+    const netPct = totalNet>0 ? (i.net||0)/totalNet*100 : 0;
+    const qtyPct = totalQty>0 ? (i.qty||0)/totalQty*100 : 0;
+    if (Math.max(netPct, qtyPct) >= BASE_MENU_SHARE_THRESHOLD) out.add(nm);
   });
   return out;
 }
