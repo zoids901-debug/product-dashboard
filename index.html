@@ -505,7 +505,9 @@ let abcSort = 'net';
 
 // 드릴다운 상태
 
-let LOADED_MONTHS = [];  // loadRange에서 저장
+let LOADED_MONTHS = [];  // loadRange에서 저장 (월별 모드)
+let LOADED_DATES  = [];  // loadDailyRange에서 저장 (일별 모드)
+let LOAD_MODE     = 'monthly';  // 'monthly' | 'daily'
 
 let drillChart = null;
 
@@ -968,21 +970,33 @@ function updateABC() {
 
   const totalQty = fd.reduce((s,r)=>s+r.qty,0);
 
-  // 기간 절반 분할 (추세 분석용)
-  const monthFiles = LOADED_MONTHS.map(m=>m.file);
-  const half = Math.ceil(monthFiles.length/2);
-  const firstHalf = new Set(monthFiles.slice(0, half));
-  const secondHalf = new Set(monthFiles.slice(half));
-  // 일수 보정
-  const monthDays = (f) => {
-    const yy = 2000 + parseInt(f.slice(0,2));
-    const mm = parseInt(f.slice(2,4));
-    if (yy === 2026 && mm === 4) return 26;  // 4월은 진행 중
-    return new Date(yy, mm, 0).getDate();
-  };
-  const firstDays = monthFiles.slice(0, half).reduce((s,f)=>s+monthDays(f), 0);
-  const secondDays = monthFiles.slice(half).reduce((s,f)=>s+monthDays(f), 0);
-  const canTrend = monthFiles.length >= 2 && firstDays > 0 && secondDays > 0;
+  // 기간 절반 분할 (추세 분석용) — 일별/월별 모드 자동 분기
+  let canTrend, firstHalf, secondHalf, firstDays, secondDays, trendKey;
+  if (LOAD_MODE === 'daily' && LOADED_DATES.length > 0) {
+    const dates = LOADED_DATES;
+    const half = Math.ceil(dates.length / 2);
+    firstHalf  = new Set(dates.slice(0, half));
+    secondHalf = new Set(dates.slice(half));
+    firstDays  = half;
+    secondDays = dates.length - half;
+    canTrend   = dates.length >= 4 && firstDays > 0 && secondDays > 0;
+    trendKey   = 'date';
+  } else {
+    const monthFiles = LOADED_MONTHS.map(m=>m.file);
+    const half = Math.ceil(monthFiles.length/2);
+    firstHalf  = new Set(monthFiles.slice(0, half));
+    secondHalf = new Set(monthFiles.slice(half));
+    const monthDays = (f) => {
+      const yy = 2000 + parseInt(f.slice(0,2));
+      const mm = parseInt(f.slice(2,4));
+      if (yy === 2026 && mm === 4) return 26;  // 4월은 진행 중
+      return new Date(yy, mm, 0).getDate();
+    };
+    firstDays  = monthFiles.slice(0, half).reduce((s,f)=>s+monthDays(f), 0);
+    secondDays = monthFiles.slice(half).reduce((s,f)=>s+monthDays(f), 0);
+    canTrend   = monthFiles.length >= 2 && firstDays > 0 && secondDays > 0;
+    trendKey   = 'month';
+  }
 
   // 아이템별 집계 + 전반/후반 분할
   const items = {};
@@ -991,8 +1005,9 @@ function updateABC() {
     items[r.item].qty+=r.qty;
     items[r.item].net+=r.net;
     if (canTrend) {
-      if (firstHalf.has(r.month)) items[r.item].qFirst += r.qty;
-      else if (secondHalf.has(r.month)) items[r.item].qSecond += r.qty;
+      const k = r[trendKey];
+      if (firstHalf.has(k)) items[r.item].qFirst += r.qty;
+      else if (secondHalf.has(k)) items[r.item].qSecond += r.qty;
     }
   });
   // 추세 % 계산 (일평균 기준)
@@ -1181,7 +1196,7 @@ const weekendBgPlugin = {
 
 async function showDrill(itemName, catBig) {
 
-  if (!LOADED_MONTHS.length) return;
+  if (!LOADED_MONTHS.length && !LOADED_DATES.length) return;
 
   currentDrillItem = itemName;
 
@@ -1201,22 +1216,19 @@ async function showDrill(itemName, catBig) {
 
   const unit = currentDrillCat === '베이커리' ? '개' : '잔';
 
-  // 날짜 목록 생성
-
+  // 날짜 목록 생성 — 일별 모드면 LOADED_DATES, 월별 모드면 월의 모든 일자
   const dates = [];
 
-  for (const m of LOADED_MONTHS) {
-
-    const yy = '20' + m.file.slice(0,2);
-
-    const mm = m.file.slice(2,4);
-
-    const daysInMonth = new Date(+yy, +mm, 0).getDate();
-
-    for (let d = 1; d <= daysInMonth; d++)
-
-      dates.push(`${yy}-${mm}-${String(d).padStart(2,'0')}`);
-
+  if (LOAD_MODE === 'daily' && LOADED_DATES.length) {
+    dates.push(...LOADED_DATES);
+  } else {
+    for (const m of LOADED_MONTHS) {
+      const yy = '20' + m.file.slice(0,2);
+      const mm = m.file.slice(2,4);
+      const daysInMonth = new Date(+yy, +mm, 0).getDate();
+      for (let d = 1; d <= daysInMonth; d++)
+        dates.push(`${yy}-${mm}-${String(d).padStart(2,'0')}`);
+    }
   }
 
   // 일별 파일 fetch
@@ -2426,6 +2438,8 @@ async function loadRange(fromFile, toFile) {
     STORES = ['\uc804\uccb4', ...activeStores];
 
     LOADED_MONTHS = months;
+    LOADED_DATES  = [];
+    LOAD_MODE     = 'monthly';
 
     DATA_LOADED = true;
 
@@ -2480,6 +2494,151 @@ async function loadRange(fromFile, toFile) {
   }
 
 }
+
+// ============================================================
+// 일 단위 모드 (loadDailyRange)
+// ============================================================
+
+async function loadDailyRange(startDate, endDate) {
+  if (!startDate || !endDate) return;
+  if (startDate > endDate) { const t = startDate; startDate = endDate; endDate = t; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'loading-overlay';
+  overlay.id = 'loading-overlay';
+  overlay.textContent = '일별 데이터 로딩 중...';
+  document.body.appendChild(overlay);
+
+  const status = document.getElementById('load-status');
+  status.textContent = '로딩 중...';
+
+  try {
+    // 날짜 리스트 생성 (YYYY-MM-DD)
+    const dates = [];
+    for (let d = new Date(startDate); d <= new Date(endDate); d.setDate(d.getDate()+1)) {
+      dates.push(d.toISOString().slice(0,10));
+    }
+
+    // 카테고리 맵용 월별 파일 결정 (마지막 일자가 속한 월 → 없으면 최신 가용 월)
+    const lastDate = dates[dates.length - 1];
+    const lastMonthFile = lastDate.slice(2,4) + lastDate.slice(5,7) + '.json';
+    const availableFiles = AVAILABLE_MONTHS.map(m => m.file);
+    const catMonthFile = availableFiles.includes(lastMonthFile)
+      ? lastMonthFile
+      : (availableFiles[availableFiles.length - 1] || null);
+
+    // 일별 파일 + 카테고리 월별 동시 fetch
+    const DAILY_BASE = DATA_BASE_URL + 'daily/';
+    const [dailyResults, catMap] = await Promise.all([
+      Promise.all(dates.map(async dt => {
+        const fname = dt.slice(2,4) + dt.slice(5,7) + dt.slice(8,10) + '.json';
+        try {
+          const r = await fetch(DAILY_BASE + fname);
+          if (!r.ok) return null;
+          return { date: dt, data: await r.json() };
+        } catch { return null; }
+      })),
+      (async () => {
+        const cm = {};
+        if (!catMonthFile) return cm;
+        try {
+          const r = await fetch(DATA_BASE_URL + catMonthFile);
+          if (!r.ok) return cm;
+          const j = await r.json();
+          (j.items || []).forEach(it => {
+            if (!cm[it.item]) {
+              cm[it.item] = {
+                cat_big:   it.cat_big   || '',
+                cat_mid:   it.cat_mid   || '',
+                cat_small: it.cat_small || '',
+              };
+            }
+          });
+        } catch {}
+        return cm;
+      })(),
+    ]);
+
+    // flatten — 월별 형식과 동일하게 정규화
+    const normStore = s => s.endsWith('점') ? s.slice(0,-1) : s;
+    const allItems = [];
+    let validDates = 0;
+    dailyResults.forEach(res => {
+      if (!res) return;
+      validDates++;
+      for (const [store, items] of Object.entries(res.data.stores || {})) {
+        const ns = normStore(store);
+        for (const it of items) {
+          const name = (it.item || '').trim();
+          if (!name) continue;
+          const ov = CAT_OVERRIDE[name];
+          const cm = catMap[name] || {};
+          allItems.push({
+            store:     ns,
+            item:      name,
+            qty:       it.qty || 0,
+            net:       it.net || 0,
+            date:      res.date,
+            cat_big:   ov ? ov.cat_big   : (cm.cat_big   || '기타'),
+            cat_mid:   ov ? ov.cat_mid   : (cm.cat_mid   || ''),
+            cat_small: ov ? ov.cat_small : (cm.cat_small || ''),
+          });
+        }
+      }
+    });
+
+    const activeStores = [...new Set(allItems.map(r => r.store))].sort();
+
+    RAW = allItems;
+    STORES = ['전체', ...activeStores];
+    LOADED_MONTHS = [];
+    LOADED_DATES  = dates;
+    LOAD_MODE     = 'daily';
+    DATA_LOADED   = true;
+
+    const label = startDate === endDate ? startDate : (startDate + ' ~ ' + endDate);
+    document.getElementById('period-label').textContent = 'POS 아이템별 판매 데이터 분석 · ' + label + ' (일 단위)';
+    document.title = '인크코피 상품기획 대시보드 — ' + label;
+    const storeLbl = document.getElementById('store-label');
+    if (storeLbl) storeLbl.textContent = selStores.size === 0 ? '' : '● ' + [...selStores].join(' + ') + ' 보는 중';
+    status.textContent = '✓ ' + label + ' (' + RAW.length.toLocaleString() + '건, ' + validDates + '/' + dates.length + '일)';
+    status.style.color = '#00b894';
+    document.getElementById('cat-note').style.display = 'none';
+
+    update();
+  } catch (e) {
+    status.textContent = '❌ 로드 실패: ' + e.message;
+    status.style.color = '#e17055';
+    console.error(e);
+  } finally {
+    const ov = document.getElementById('loading-overlay');
+    if (ov) ov.remove();
+  }
+}
+
+// 자동 분기: 60일 이하 → 일별, 초과 → 월별
+async function loadDateRange(startDate, endDate) {
+  if (!startDate || !endDate) return;
+  if (startDate > endDate) { const t = startDate; startDate = endDate; endDate = t; }
+  const days = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
+
+  if (days <= 60) return loadDailyRange(startDate, endDate);
+
+  // 월별 모드 — start/end가 속한 월의 file 추출
+  const fromFile = startDate.slice(2,4) + startDate.slice(5,7) + '.json';
+  const toFile   = endDate.slice(2,4)   + endDate.slice(5,7)   + '.json';
+  const available = AVAILABLE_MONTHS.map(m => m.file);
+  // 가용 월 중 가장 가까운 것으로 매핑
+  const pick = (f, fallbackIdx) => available.includes(f) ? f : (available[fallbackIdx] || available[available.length-1]);
+  const ff = pick(fromFile, 0);
+  const tf = pick(toFile,   available.length - 1);
+  return loadRange(ff, tf);
+}
+
+// unified iframe / 외부 호출용
+window.loadDateRange  = loadDateRange;
+window.loadDailyRange = loadDailyRange;
+window.loadRange      = loadRange;
 
 // Initialize
 
