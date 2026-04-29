@@ -826,7 +826,7 @@ function updateStoreCompare() {
 
       const pct = v/total*100;
 
-      if(pct<1) return;
+      if(pct<=0) return;
 
       html += `<div style="width:${pct}%;background:${BIG_COLORS[cat]}" title="${cat} ${P(v,total)}">${pct>8?P(v,total):''}</div>`;
 
