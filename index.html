@@ -832,6 +832,14 @@ function updateStoreCompare() {
 
     });
 
+    // BIG_ORDER에 없는 카테고리(매장메뉴, RTD, 빈값 등) 합쳐서 '기타'로 표시 → 우측 끝선 100%
+    let otherV = 0;
+    Object.keys(byBig).forEach(cat=>{ if(!BIG_ORDER.includes(cat)) otherV += byBig[cat]; });
+    if(otherV > 0) {
+      const otherPct = otherV/total*100;
+      html += `<div style="width:${otherPct}%;background:#94a3b8" title="기타 ${P(otherV,total)}">${otherPct>8?P(otherV,total):''}</div>`;
+    }
+
     html += `</div></div>`;
 
   });
@@ -843,6 +851,8 @@ function updateStoreCompare() {
     html += `<span><i style="background:${BIG_COLORS[cat]}"></i>${cat}</span>`;
 
   });
+
+  html += `<span><i style="background:#94a3b8"></i>기타</span>`;
 
   html += `</div>`;
 
