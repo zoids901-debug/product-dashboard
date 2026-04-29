@@ -1,0 +1,34 @@
+name: Daily Data Sync
+
+on:
+  schedule:
+    # 매일 KST 23:00 = UTC 14:00
+    - cron: '0 14 * * *'
+  workflow_dispatch:  # 수동 실행 가능
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright requests
+          python -m playwright install --with-deps chromium
+
+      - name: Run sync
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_REPO: zoids901-debug/product-dashboard
+          OKPOS_ID: ${{ secrets.OKPOS_ID }}
+          OKPOS_PW: ${{ secrets.OKPOS_PW }}
+          TOSS_ID: ${{ secrets.TOSS_ID }}
+          TOSS_PW: ${{ secrets.TOSS_PW }}
+        run: python scripts/actions_sync.py
