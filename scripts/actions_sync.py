@@ -136,6 +136,15 @@ def is_valid(name):
     return True
 
 
+# 매장간 상품명 표기 차이 통일 (잘못된 표기 → 정식 표기)
+NAME_ALIASES = {
+    '애플 잼 스콘': '애플잼 스콘',
+}
+
+def normalize_name(name):
+    return NAME_ALIASES.get(name, name)
+
+
 # ── TOSS ──────────────────────────────────────────
 async def toss_login():
     """playwright UI 로그인 → API 호출 캡쳐로 헤더 추출"""
@@ -207,6 +216,7 @@ def toss_fetch_day(headers, date_str):
         qty = c.get('transactionCount', 0)
         net = c.get('amountMoney', 0)
         if nm and qty > 0:
+            nm = normalize_name(nm)
             out[nm] = {'qty': qty, 'net': net}
     return out
 
@@ -290,6 +300,7 @@ async def main():
                     qty = int(row.get('SALE_QTY') or 0)
                     net = int(row.get('TOT_SALE_AMT') or 0)
                     if not is_valid(nm) or net == 0: continue
+                    nm = normalize_name(nm)
                     if nm in bucket_dict:
                         bucket_dict[nm]['qty'] += qty
                         bucket_dict[nm]['net'] += net
