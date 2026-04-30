@@ -806,8 +806,8 @@ function updateStoreCompare() {
 
   stores.forEach(store=>{
 
-    // 4개 공식 카테고리만 사용 (RTD/매장메뉴/빈값은 스크래핑 노이즈로 간주, 제외)
-    const sd = RAW.filter(r=>r.store===store && BIG_ORDER.includes(r.cat_big));
+    // RTD/매장메뉴/빈값 등은 MD/기타로 묶어서 표시
+    const sd = RAW.filter(r=>r.store===store);
 
     const total = sd.reduce((s,r)=>s+r.net,0);
 
@@ -815,7 +815,10 @@ function updateStoreCompare() {
 
     const byBig = {};
 
-    sd.forEach(r=>{ byBig[r.cat_big]=(byBig[r.cat_big]||0)+r.net; });
+    sd.forEach(r=>{
+      const cat = BIG_ORDER.includes(r.cat_big) ? r.cat_big : 'MD/기타';
+      byBig[cat] = (byBig[cat]||0) + r.net;
+    });
 
     html += `<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;margin-bottom:3px">${store} <span style="color:#888;font-weight:400">${M(total)}</span></div>`;
 
