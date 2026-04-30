@@ -1136,6 +1136,21 @@ function updateABC() {
     </tr>`;
   });
 
+  // 합계 행 (수량·실매출 sum, 단가는 가중평균)
+  const totQty = sorted.reduce((s,i)=>s+i.qty, 0);
+  const totNet = sorted.reduce((s,i)=>s+i.net, 0);
+  const avgPrice = totQty > 0 ? Math.round(totNet/totQty) : 0;
+  h += `<tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #94a3b8;position:sticky;bottom:0">
+    <td colspan="5" style="text-align:right;color:#475569">합계 (${sorted.length}개 상품)</td>
+    <td class="r" title="총매출 ÷ 총수량 = 가중평균 단가">${comma(avgPrice)}원<span style="font-size:9px;color:#94a3b8;font-weight:400;margin-left:2px">평균</span></td>
+    <td class="r">${comma(totQty)}</td>
+    <td class="r">${M(totNet)}</td>
+    <td class="r">100.0%</td>
+    <td class="r">-</td>
+    <td>-</td>
+    ${canTrend ? '<td class="r">-</td>' : ''}
+  </tr>`;
+
   h += '</tbody>';
 
   document.getElementById('tbl-abc').innerHTML=h;
