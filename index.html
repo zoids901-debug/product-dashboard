@@ -806,7 +806,8 @@ function updateStoreCompare() {
 
   stores.forEach(store=>{
 
-    const sd = RAW.filter(r=>r.store===store);
+    // 4개 공식 카테고리만 사용 (RTD/매장메뉴/빈값은 스크래핑 노이즈로 간주, 제외)
+    const sd = RAW.filter(r=>r.store===store && BIG_ORDER.includes(r.cat_big));
 
     const total = sd.reduce((s,r)=>s+r.net,0);
 
@@ -828,17 +829,9 @@ function updateStoreCompare() {
 
       if(pct<=0) return;
 
-      html += `<div style="width:${pct}%;background:${BIG_COLORS[cat]}" title="${cat} ${P(v,total)}">${pct>8?P(v,total):''}</div>`;
+      html += `<div style="width:${pct}%;background:${BIG_COLORS[cat]}" title="${cat} ${comma(v)}원 (${P(v,total)})">${pct>8?P(v,total):''}</div>`;
 
     });
-
-    // BIG_ORDER에 없는 카테고리(매장메뉴, RTD, 빈값 등) 합쳐서 '기타'로 표시 → 우측 끝선 100%
-    let otherV = 0;
-    Object.keys(byBig).forEach(cat=>{ if(!BIG_ORDER.includes(cat)) otherV += byBig[cat]; });
-    if(otherV > 0) {
-      const otherPct = otherV/total*100;
-      html += `<div style="width:${otherPct}%;background:#94a3b8" title="기타 ${P(otherV,total)}">${otherPct>8?P(otherV,total):''}</div>`;
-    }
 
     html += `</div></div>`;
 
@@ -851,8 +844,6 @@ function updateStoreCompare() {
     html += `<span><i style="background:${BIG_COLORS[cat]}"></i>${cat}</span>`;
 
   });
-
-  html += `<span><i style="background:#94a3b8"></i>기타</span>`;
 
   html += `</div>`;
 
