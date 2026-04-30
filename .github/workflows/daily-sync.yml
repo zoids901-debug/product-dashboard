@@ -33,19 +33,17 @@ jobs:
           TOSS_PW: ${{ secrets.TOSS_PW }}
         run: python scripts/actions_sync.py
 
-      - name: Notify on failure (create issue)
+      - name: Notify on failure
         if: failure()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GH_PAT }}
           script: |
-            const { owner, repo } = context.repo;
             const date = new Date().toISOString().slice(0,10);
             await github.rest.issues.create({
-              owner, repo,
-              title: `❌ Daily sync 실패 (${date})`,
-              body: `워크플로우 [${context.workflow}](${context.payload.repository.html_url}/actions/runs/${context.runId}) 실패.
-
-로그 확인 후 재실행 필요.`,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Daily sync failed (' + date + ')',
+              body: 'Workflow failed. Run: ' + context.payload.repository.html_url + '/actions/runs/' + context.runId,
               labels: ['automation-failure']
             });
