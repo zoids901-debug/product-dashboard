@@ -280,11 +280,15 @@ async def main():
     include_today = True  # GH Actions는 정해진 시각에 돌므로 항상 당일 포함
     # OKPOS가 채워야 하는 매장 location (운정은 TOSS 별도)
     OKPOS_LOCATIONS = {'가산','다산','수원','하남','광주'}
+    # ── ONE-TIME FORCE REFETCH (중복카운트 데이터 원복) ──
+    FORCE_REFETCH_DATES = {date(2026,4,29), date(2026,4,30),
+                            date(2026,5,1), date(2026,5,2), date(2026,5,3),
+                            date(2026,5,4), date(2026,5,5)}
     target_dates = []
     for i in range(0 if include_today else 1, LOOKBACK_DAYS+1):
         d = today - timedelta(days=i)
         fname = d.strftime('%y%m%d') + '.json'
-        needs_fetch = (d == today) or (not gh_exists(f'data/daily/{fname}'))
+        needs_fetch = (d == today) or (not gh_exists(f'data/daily/{fname}')) or (d in FORCE_REFETCH_DATES)
         if not needs_fetch:
             # 매장 누락 체크 — 5개 OKPOS 매장 모두 있어야
             _, existing = gh_get(f'data/daily/{fname}')
