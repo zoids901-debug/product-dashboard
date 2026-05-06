@@ -245,12 +245,16 @@ def rebuild_month(year, month):
                 nm = (it.get('item') or '').strip()
                 if not nm: continue
                 k = (store, nm)
-                if k not in agg: agg[k] = {'qty':0,'net':0}
+                if k not in agg: agg[k] = {'qty':0,'net':0,'daily_cat':None}
                 agg[k]['qty'] += it.get('qty',0)
                 agg[k]['net'] += it.get('net',0)
+                # daily에서 카테고리 학습 (OKPOS 응답 기반, 첫 번째 값 유지)
+                if it.get('cat_big') and not agg[k]['daily_cat']:
+                    agg[k]['daily_cat'] = {kk: it.get(kk,'') or '' for kk in ('cat_big','cat_mid','cat_small')}
     items_out = []
     for (store, nm), v in agg.items():
-        cat = cat_map.get(nm, {'cat_big':'','cat_mid':'','cat_small':''})
+        # 우선순위: 기존 월별 cat_map (수동 보정 보존) > daily 학습 cat (OKPOS 자동) > 빈값
+        cat = cat_map.get(nm) or v.get('daily_cat') or {'cat_big':'','cat_mid':'','cat_small':''}
         items_out.append({'store':store,'item':nm,'qty':v['qty'],'net':v['net'],**cat})
     out = {'items': items_out}
     now = date.today()
@@ -298,26 +302,10 @@ async def main():
         path = f'data/daily/{fname}'
         sha, existing = gh_get(path)
         day_stores = (existing or {}).get('stores', {}) if existing else {}
-        _printed_keys = False
-        # [debug v4] 매장별 호출 응답의 LCLS_NM 분포 확인 (per-store call에 HQ 분류 들어있는지)
-        _debug_done = False
         for si in STORES.values():
             loc = si['location']
             try:
                 rows = okpos_fetch_day(okpos_session, csrf, savename, date_str, si['code'], si['name'])
-                if not _debug_done and d == today and rows:
-                    from collections import Counter as _C
-                    lcls_count = _C(r.get('LCLS_NM','') for r in rows)
-                    print(f'[debug] 매장별 ({si["name"]}) 호출: {len(rows)}건', flush=True)
-                    print(f'[debug] LCLS_NM 분포: {dict(lcls_count.most_common())}', flush=True)
-                    # 처음 5개 + 다양한 LCLS의 샘플
-                    seen_lcls = set()
-                    for r in rows:
-                        lcls = r.get('LCLS_NM','')
-                        if lcls not in seen_lcls:
-                            seen_lcls.add(lcls)
-                            print(f'[debug] LCLS={lcls!r} 샘플: PROD_CD={r.get("PROD_CD")} PROD_NM={r.get("PROD_NM")} MCLS={r.get("MCLS_NM")} SCLS={r.get("SCLS_NM")}', flush=True)
-                    _debug_done = True
                 bucket = day_stores.setdefault(loc, [])
                 # 같은 매장 중복 방지: 기존 매장 키 항목 초기화하고 다시 채움
                 # (지점 여러 코드(다산 1층/지하)는 합산)
@@ -328,11 +316,20 @@ async def main():
                     net = int(row.get('TOT_SALE_AMT') or 0)
                     if not is_valid(nm) or net == 0: continue
                     nm = normalize_name(nm)
+                    cat_big   = (row.get('LCLS_NM') or '').strip()
+                    cat_mid   = (row.get('MCLS_NM') or '').strip()
+                    cat_small = (row.get('SCLS_NM') or '').strip()
                     if nm in bucket_dict:
                         bucket_dict[nm]['qty'] += qty
                         bucket_dict[nm]['net'] += net
+                        # 카테고리는 첫 번째로 만난 값 유지 (덮어쓰지 않음)
+                        if not bucket_dict[nm].get('cat_big') and cat_big:
+                            bucket_dict[nm]['cat_big']   = cat_big
+                            bucket_dict[nm]['cat_mid']   = cat_mid
+                            bucket_dict[nm]['cat_small'] = cat_small
                     else:
-                        bucket_dict[nm] = {'item': nm, 'qty': qty, 'net': net}
+                        bucket_dict[nm] = {'item': nm, 'qty': qty, 'net': net,
+                                           'cat_big': cat_big, 'cat_mid': cat_mid, 'cat_small': cat_small}
                 day_stores[loc] = list(bucket_dict.values())
             except Exception as e:
                 print(f'  {date_str} {loc} 오류: {e}', flush=True)
