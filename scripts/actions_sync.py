@@ -230,7 +230,8 @@ def rebuild_month(year, month):
     if existing:
         for it in existing.get('items', []):
             nm = (it.get('item') or '').strip()
-            if nm:
+            # 카테고리 있는 entry만 cat_map에 등록 (빈 카테고리는 daily fallback 활용)
+            if nm and it.get('cat_big'):
                 cat_map[nm] = {k: it.get(k,'') or '' for k in ('cat_big','cat_mid','cat_small')}
     days = calendar.monthrange(year, month)[1]
     agg = {}
@@ -292,6 +293,14 @@ async def main():
                 missing = OKPOS_LOCATIONS - existing_locs
                 print(f'[OKPOS] {d.isoformat()} 누락 매장 발견: {missing} → 재수집', flush=True)
                 needs_fetch = True
+            else:
+                # 카테고리 누락 체크 — 어느 매장이든 첫 item에 cat_big이 없으면 재수집
+                for loc, items in (existing or {}).get('stores', {}).items():
+                    if loc not in OKPOS_LOCATIONS: continue
+                    if items and not items[0].get('cat_big'):
+                        print(f'[OKPOS] {d.isoformat()} {loc} 카테고리 누락 → 재수집', flush=True)
+                        needs_fetch = True
+                        break
         if needs_fetch:
             target_dates.append(d)
     print(f'[OKPOS] 대상 날짜: {[d.isoformat() for d in target_dates]}', flush=True)
