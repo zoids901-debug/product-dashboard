@@ -304,10 +304,20 @@ async def main():
             try:
                 rows_all = okpos_fetch_day(okpos_session, csrf, savename, date_str, '', '전체')
                 print(f'[debug] 전체매장 호출: {len(rows_all)}건', flush=True)
-                if rows_all:
-                    print(f'[debug] 전체매장 sample row 1: {rows_all[0]}', flush=True)
-                    if len(rows_all) > 5:
-                        print(f'[debug] 전체매장 sample row 5: {rows_all[5]}', flush=True)
+                from collections import Counter as _C
+                lcls_count = _C(r.get('LCLS_NM','') for r in rows_all)
+                print(f'[debug] LCLS_NM 분포: {dict(lcls_count.most_common())}', flush=True)
+                # 본사 분류 row (LCLS_NM이 매장명 아닌 것) sample 출력
+                hq_rows = [r for r in rows_all if r.get('LCLS_NM') not in ('가산점','다산점','다산1호점','수원점','하남미사점','광주점','광주기아챔피언스필드점','광주(To go zone)')]
+                print(f'[debug] 본사분류 row 수: {len(hq_rows)}', flush=True)
+                for i, r in enumerate(hq_rows[:5]):
+                    print(f'[debug] 본사 row {i}: PROD_CD={r.get("PROD_CD")} PROD_NM={r.get("PROD_NM")} LCLS={r.get("LCLS_NM")} MCLS={r.get("MCLS_NM")} SCLS={r.get("SCLS_NM")} SHOP={r.get("SHOP_CD")}', flush=True)
+                # 인크로쉐, 인크 플라워 같은 알려진 HQ 상품 직접 찾기
+                for r in rows_all:
+                    nm = r.get('PROD_NM','')
+                    if '인크로쉐' in nm or '플라워' in nm or '아메리카노' in nm:
+                        print(f'[debug] 키 메뉴: PROD_CD={r.get("PROD_CD")} PROD_NM={nm} LCLS={r.get("LCLS_NM")} MCLS={r.get("MCLS_NM")} SCLS={r.get("SCLS_NM")} SHOP={r.get("SHOP_CD")}', flush=True)
+                        break
             except Exception as e:
                 print(f'[debug] 전체매장 호출 실패: {e}', flush=True)
         for si in STORES.values():
