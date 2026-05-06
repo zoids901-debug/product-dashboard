@@ -299,14 +299,21 @@ async def main():
         sha, existing = gh_get(path)
         day_stores = (existing or {}).get('stores', {}) if existing else {}
         _printed_keys = False
+        # [debug] 매장 전체 호출로 본사 분류가 반환되는지 비교
+        if d == today:
+            try:
+                rows_all = okpos_fetch_day(okpos_session, csrf, savename, date_str, '', '전체')
+                print(f'[debug] 전체매장 호출: {len(rows_all)}건', flush=True)
+                if rows_all:
+                    print(f'[debug] 전체매장 sample row 1: {rows_all[0]}', flush=True)
+                    if len(rows_all) > 5:
+                        print(f'[debug] 전체매장 sample row 5: {rows_all[5]}', flush=True)
+            except Exception as e:
+                print(f'[debug] 전체매장 호출 실패: {e}', flush=True)
         for si in STORES.values():
             loc = si['location']
             try:
                 rows = okpos_fetch_day(okpos_session, csrf, savename, date_str, si['code'], si['name'])
-                if rows and not _printed_keys:
-                    print(f'[debug] OKPOS row keys ({si["name"]} {date_str}): {list(rows[0].keys())}', flush=True)
-                    print(f'[debug] sample row: {rows[0]}', flush=True)
-                    _printed_keys = True
                 bucket = day_stores.setdefault(loc, [])
                 # 같은 매장 중복 방지: 기존 매장 키 항목 초기화하고 다시 채움
                 # (지점 여러 코드(다산 1층/지하)는 합산)
