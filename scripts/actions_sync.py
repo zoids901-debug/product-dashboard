@@ -299,31 +299,25 @@ async def main():
         sha, existing = gh_get(path)
         day_stores = (existing or {}).get('stores', {}) if existing else {}
         _printed_keys = False
-        # [debug] 매장 전체 호출로 본사 분류가 반환되는지 비교
-        if d == today:
-            try:
-                rows_all = okpos_fetch_day(okpos_session, csrf, savename, date_str, '', '전체')
-                print(f'[debug] 전체매장 호출: {len(rows_all)}건', flush=True)
-                from collections import Counter as _C
-                lcls_count = _C(r.get('LCLS_NM','') for r in rows_all)
-                print(f'[debug] LCLS_NM 분포: {dict(lcls_count.most_common())}', flush=True)
-                # 본사 분류 row (LCLS_NM이 매장명 아닌 것) sample 출력
-                hq_rows = [r for r in rows_all if r.get('LCLS_NM') not in ('가산점','다산점','다산1호점','수원점','하남미사점','광주점','광주기아챔피언스필드점','광주(To go zone)')]
-                print(f'[debug] 본사분류 row 수: {len(hq_rows)}', flush=True)
-                for i, r in enumerate(hq_rows[:5]):
-                    print(f'[debug] 본사 row {i}: PROD_CD={r.get("PROD_CD")} PROD_NM={r.get("PROD_NM")} LCLS={r.get("LCLS_NM")} MCLS={r.get("MCLS_NM")} SCLS={r.get("SCLS_NM")} SHOP={r.get("SHOP_CD")}', flush=True)
-                # 인크로쉐, 인크 플라워 같은 알려진 HQ 상품 직접 찾기
-                for r in rows_all:
-                    nm = r.get('PROD_NM','')
-                    if '인크로쉐' in nm or '플라워' in nm or '아메리카노' in nm:
-                        print(f'[debug] 키 메뉴: PROD_CD={r.get("PROD_CD")} PROD_NM={nm} LCLS={r.get("LCLS_NM")} MCLS={r.get("MCLS_NM")} SCLS={r.get("SCLS_NM")} SHOP={r.get("SHOP_CD")}', flush=True)
-                        break
-            except Exception as e:
-                print(f'[debug] 전체매장 호출 실패: {e}', flush=True)
+        # [debug v4] 매장별 호출 응답의 LCLS_NM 분포 확인 (per-store call에 HQ 분류 들어있는지)
+        _debug_done = False
         for si in STORES.values():
             loc = si['location']
             try:
                 rows = okpos_fetch_day(okpos_session, csrf, savename, date_str, si['code'], si['name'])
+                if not _debug_done and d == today and rows:
+                    from collections import Counter as _C
+                    lcls_count = _C(r.get('LCLS_NM','') for r in rows)
+                    print(f'[debug] 매장별 ({si["name"]}) 호출: {len(rows)}건', flush=True)
+                    print(f'[debug] LCLS_NM 분포: {dict(lcls_count.most_common())}', flush=True)
+                    # 처음 5개 + 다양한 LCLS의 샘플
+                    seen_lcls = set()
+                    for r in rows:
+                        lcls = r.get('LCLS_NM','')
+                        if lcls not in seen_lcls:
+                            seen_lcls.add(lcls)
+                            print(f'[debug] LCLS={lcls!r} 샘플: PROD_CD={r.get("PROD_CD")} PROD_NM={r.get("PROD_NM")} MCLS={r.get("MCLS_NM")} SCLS={r.get("SCLS_NM")}', flush=True)
+                    _debug_done = True
                 bucket = day_stores.setdefault(loc, [])
                 # 같은 매장 중복 방지: 기존 매장 키 항목 초기화하고 다시 채움
                 # (지점 여러 코드(다산 1층/지하)는 합산)
