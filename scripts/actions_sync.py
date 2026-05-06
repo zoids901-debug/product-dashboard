@@ -311,10 +311,16 @@ async def main():
         path = f'data/daily/{fname}'
         sha, existing = gh_get(path)
         day_stores = (existing or {}).get('stores', {}) if existing else {}
+        # 재수집 시 같은 location에 누적되지 않도록, 이번 run에서 처음 만나는 매장은 bucket reset
+        # (다산 1층 + 지하 같은 동일 loc 다중 SHOP_CD는 reset 이후 누적되어야 하므로 set으로 추적)
+        fetched_locs = set()
         for si in STORES.values():
             loc = si['location']
             try:
                 rows = okpos_fetch_day(okpos_session, csrf, savename, date_str, si['code'], si['name'])
+                if loc not in fetched_locs:
+                    day_stores[loc] = []  # 첫 fetch에서 기존 데이터 클리어
+                    fetched_locs.add(loc)
                 bucket = day_stores.setdefault(loc, [])
                 # 같은 매장 중복 방지: 기존 매장 키 항목 초기화하고 다시 채움
                 # (지점 여러 코드(다산 1층/지하)는 합산)
