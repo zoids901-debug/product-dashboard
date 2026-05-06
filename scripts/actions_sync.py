@@ -298,10 +298,15 @@ async def main():
         path = f'data/daily/{fname}'
         sha, existing = gh_get(path)
         day_stores = (existing or {}).get('stores', {}) if existing else {}
+        _printed_keys = False
         for si in STORES.values():
             loc = si['location']
             try:
                 rows = okpos_fetch_day(okpos_session, csrf, savename, date_str, si['code'], si['name'])
+                if rows and not _printed_keys:
+                    print(f'[debug] OKPOS row keys ({si["name"]} {date_str}): {list(rows[0].keys())}', flush=True)
+                    print(f'[debug] sample row: {rows[0]}', flush=True)
+                    _printed_keys = True
                 bucket = day_stores.setdefault(loc, [])
                 # 같은 매장 중복 방지: 기존 매장 키 항목 초기화하고 다시 채움
                 # (지점 여러 코드(다산 1층/지하)는 합산)
