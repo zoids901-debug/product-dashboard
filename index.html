@@ -2686,15 +2686,33 @@ function downloadExcel() {
   const items = (selStores.size === 0)
     ? RAW : RAW.filter(r => selStores.has(r.store));
 
-  // 매장×상품 합산
-  const agg = {};  // {store: {item: {qty, net, cat_big, cat_mid, cat_small}}}
+  // 일자/월 라벨: daily 모드면 r.date(YYYY-MM-DD), monthly 모드면 r.month("2401.json" → "2024-01")
+  const dateOf = r => {
+    if (r.date) return r.date;
+    if (r.month) {
+      const m = r.month.replace('.json','');
+      return m.length === 4 ? `20${m.slice(0,2)}-${m.slice(2,4)}` : m;
+    }
+    return '';
+  };
+  const dateLabel = (LOAD_MODE === 'daily') ? '날짜' : '월';
+
+  // 매장 × (월/일) × 상품 grain — 시간 정보 보존
+  const agg = {}; // {store: {key(date+item): {date, item, qty, net, cat_*}}}
+  const sumByStore = {}; // {store: {qty, net, items:Set}}
   items.forEach(r => {
-    const k = r.store;
-    if (!agg[k]) agg[k] = {};
+    const s = r.store;
+    const dt = dateOf(r);
     const it = r.item;
-    if (!agg[k][it]) agg[k][it] = {qty:0, net:0, cat_big:r.cat_big||'', cat_mid:r.cat_mid||'', cat_small:r.cat_small||''};
-    agg[k][it].qty += r.qty || 0;
-    agg[k][it].net += r.net || 0;
+    if (!agg[s]) agg[s] = {};
+    const key = dt + '\t' + it;
+    if (!agg[s][key]) agg[s][key] = {date: dt, item: it, qty:0, net:0, cat_big:r.cat_big||'', cat_mid:r.cat_mid||'', cat_small:r.cat_small||''};
+    agg[s][key].qty += r.qty || 0;
+    agg[s][key].net += r.net || 0;
+    if (!sumByStore[s]) sumByStore[s] = {qty:0, net:0, items:new Set()};
+    sumByStore[s].qty += r.qty || 0;
+    sumByStore[s].net += r.net || 0;
+    sumByStore[s].items.add(it);
   });
 
   const wb = XLSX.utils.book_new();
@@ -2703,23 +2721,22 @@ function downloadExcel() {
   // 합계 시트
   const sumRows = [['매장','상품수','판매수량 합','매출액 합']];
   stores.forEach(s => {
-    const its = Object.values(agg[s]);
-    const qty = its.reduce((a,v)=>a+v.qty,0);
-    const net = its.reduce((a,v)=>a+v.net,0);
-    sumRows.push([s, its.length, qty, net]);
+    const v = sumByStore[s];
+    sumRows.push([s, v.items.size, v.qty, v.net]);
   });
   const wsSum = XLSX.utils.aoa_to_sheet(sumRows);
   wsSum['!cols'] = [{wch:8},{wch:10},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb, wsSum, '합계');
 
-  // 매장별 시트
+  // 매장별 시트 (날짜/월 + 상품)
   stores.forEach(s => {
-    const rows = [['상품','대분류','중분류','소분류','판매수량','매출액']];
-    const arr = Object.entries(agg[s]).map(([item, v]) => ({item, ...v}));
-    arr.sort((a,b)=>b.net - a.net);  // 매출 큰 순
-    arr.forEach(v => rows.push([v.item, v.cat_big, v.cat_mid, v.cat_small, v.qty, v.net]));
+    const rows = [[dateLabel,'상품','대분류','중분류','소분류','판매수량','매출액']];
+    const arr = Object.values(agg[s]);
+    // 날짜 오름차순, 같은 날짜는 매출 큰 순
+    arr.sort((a,b) => a.date.localeCompare(b.date) || (b.net - a.net));
+    arr.forEach(v => rows.push([v.date, v.item, v.cat_big, v.cat_mid, v.cat_small, v.qty, v.net]));
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{wch:30},{wch:12},{wch:12},{wch:14},{wch:10},{wch:14}];
+    ws['!cols'] = [{wch:12},{wch:30},{wch:12},{wch:12},{wch:14},{wch:10},{wch:14}];
     XLSX.utils.book_append_sheet(wb, ws, s.length > 28 ? s.slice(0,28) : s);
   });
 
