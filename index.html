@@ -1942,6 +1942,10 @@ function detectOutliers(itemList) {
   const out = new Set();
   itemList.forEach(i => {
     const nm = i.item || '';
+    // 1) 단가 비정상 (VIP/기프티콘/단체주문 — 단가 30만원 이상)
+    const unit = (i.qty || 0) > 0 ? (i.net || 0) / i.qty : 0;
+    if (unit >= 300000) { out.add(nm); return; }
+    // 2) 베이스 메뉴 점유율 너무 높은 케이스 (기존 룰)
     if (!BASE_MENU_PATTERNS.some(p => nm.includes(p))) return;
     const netPct = totalNet>0 ? (i.net||0)/totalNet*100 : 0;
     const qtyPct = totalQty>0 ? (i.qty||0)/totalQty*100 : 0;
