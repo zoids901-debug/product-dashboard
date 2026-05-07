@@ -11,6 +11,7 @@
 <title>인크커피 상품기획 대시보드</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <style>
 
@@ -209,6 +210,11 @@ tr:hover td{background:#f8f9fb}
   </select>
 
   <span id="load-status" style="font-size:11px;color:#888"></span>
+
+  <button id="btnExcel" title="현재 기간/매장 기준 엑셀 다운로드" onclick="downloadExcel()"
+    style="margin-left:auto;border:1px solid #10B981;background:#10B981;color:#fff;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">
+    <span>⬇</span><span>엑셀</span>
+  </button>
 
   <div id="cat-note" style="display:none;font-size:11px;color:#856404;background:#fffbf0;border:1px solid #ffeaa7;border-radius:6px;padding:5px 12px;margin-top:6px;width:100%"></div>
 
@@ -2666,6 +2672,63 @@ async function loadDateRange(startDate, endDate) {
 window.loadDateRange  = loadDateRange;
 window.loadDailyRange = loadDailyRange;
 window.loadRange      = loadRange;
+
+// ── 엑셀 다운로드 (현재 기간 + 활성 매장 기준) ──────────────────────────────
+function downloadExcel() {
+  if (!RAW || !RAW.length) { alert('데이터가 로드되지 않았습니다'); return; }
+  if (typeof XLSX === 'undefined') { alert('엑셀 라이브러리 로드 중. 잠시 후 다시'); return; }
+
+  // 필터된 데이터
+  const items = (selStores.size === 0)
+    ? RAW : RAW.filter(r => selStores.has(r.store));
+
+  // 매장×상품 합산
+  const agg = {};  // {store: {item: {qty, net, cat_big, cat_mid, cat_small}}}
+  items.forEach(r => {
+    const k = r.store;
+    if (!agg[k]) agg[k] = {};
+    const it = r.item;
+    if (!agg[k][it]) agg[k][it] = {qty:0, net:0, cat_big:r.cat_big||'', cat_mid:r.cat_mid||'', cat_small:r.cat_small||''};
+    agg[k][it].qty += r.qty || 0;
+    agg[k][it].net += r.net || 0;
+  });
+
+  const wb = XLSX.utils.book_new();
+  const stores = Object.keys(agg).sort();
+
+  // 합계 시트
+  const sumRows = [['매장','상품수','판매수량 합','매출액 합']];
+  stores.forEach(s => {
+    const its = Object.values(agg[s]);
+    const qty = its.reduce((a,v)=>a+v.qty,0);
+    const net = its.reduce((a,v)=>a+v.net,0);
+    sumRows.push([s, its.length, qty, net]);
+  });
+  const wsSum = XLSX.utils.aoa_to_sheet(sumRows);
+  wsSum['!cols'] = [{wch:8},{wch:10},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsSum, '합계');
+
+  // 매장별 시트
+  stores.forEach(s => {
+    const rows = [['상품','대분류','중분류','소분류','판매수량','매출액']];
+    const arr = Object.entries(agg[s]).map(([item, v]) => ({item, ...v}));
+    arr.sort((a,b)=>b.net - a.net);  // 매출 큰 순
+    arr.forEach(v => rows.push([v.item, v.cat_big, v.cat_mid, v.cat_small, v.qty, v.net]));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:30},{wch:12},{wch:12},{wch:14},{wch:10},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, ws, s.length > 28 ? s.slice(0,28) : s);
+  });
+
+  // 파일명: 기간 라벨 사용
+  let fname = '인크커피_상품매출';
+  if (LOADED_MONTHS && LOADED_MONTHS.length) {
+    const f = LOADED_MONTHS[0].period;
+    const t = LOADED_MONTHS[LOADED_MONTHS.length-1].period;
+    fname += `_${f}_${t}`;
+  }
+  XLSX.writeFile(wb, fname + '.xlsx');
+}
+window.downloadExcel = downloadExcel;
 
 // Initialize
 
