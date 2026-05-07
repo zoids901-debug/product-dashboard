@@ -2732,6 +2732,27 @@ async function downloadExcel() {
   // 매장 필터
   const wantStores = (selStores.size === 0) ? null : selStores;
 
+  // 카테고리 fallback map: 상품명 → cat_* (RAW의 월별 데이터 + 다른 daily 일자 기반)
+  const itemCat = {};
+  // 1) 월별 RAW에서 카테고리 학습 (가장 신뢰)
+  if (RAW && RAW.length) {
+    RAW.forEach(r => {
+      if (!itemCat[r.item] && (r.cat_big || r.cat_mid || r.cat_small)) {
+        itemCat[r.item] = {cat_big: r.cat_big||'', cat_mid: r.cat_mid||'', cat_small: r.cat_small||''};
+      }
+    });
+  }
+  // 2) daily 결과에서 카테고리 가진 첫 entry로 보강
+  dailyData.forEach(({stores: storeMap}) => {
+    Object.values(storeMap).forEach(arr => {
+      arr.forEach(r => {
+        if (!itemCat[r.item] && (r.cat_big || r.cat_mid || r.cat_small)) {
+          itemCat[r.item] = {cat_big: r.cat_big||'', cat_mid: r.cat_mid||'', cat_small: r.cat_small||''};
+        }
+      });
+    });
+  });
+
   // 매장 × 일자 × 상품 grain — daily fetch 결과 기반
   const agg = {}; // {store: [{date, item, qty, net, cat_*}, ...]}
   const sumByStore = {}; // {store: {qty, net, items:Set, days:Set}}
@@ -2739,10 +2760,14 @@ async function downloadExcel() {
   dailyData.forEach(({date, stores: storeMap}) => {
     Object.entries(storeMap).forEach(([store, arr]) => {
       if (wantStores && !wantStores.has(store)) return;
-      // 카테고리 오버라이드 적용
       arr.forEach(r => {
-        const ov = CAT_OVERRIDE && CAT_OVERRIDE[r.item];
-        const cat = ov ? ov : {cat_big: r.cat_big||'', cat_mid: r.cat_mid||'', cat_small: r.cat_small||''};
+        const ov = (typeof CAT_OVERRIDE !== 'undefined' && CAT_OVERRIDE) ? CAT_OVERRIDE[r.item] : null;
+        // 우선순위: 오버라이드 > daily 자체 카테고리 > itemCat (RAW 학습) > 빈값
+        let cat;
+        if (ov) cat = {cat_big: ov.cat_big||'', cat_mid: ov.cat_mid||'', cat_small: ov.cat_small||''};
+        else if (r.cat_big || r.cat_mid || r.cat_small) cat = {cat_big: r.cat_big||'', cat_mid: r.cat_mid||'', cat_small: r.cat_small||''};
+        else if (itemCat[r.item]) cat = itemCat[r.item];
+        else cat = {cat_big:'', cat_mid:'', cat_small:''};
         if (!agg[store]) agg[store] = [];
         agg[store].push({date, item: r.item, qty: r.qty||0, net: r.net||0, ...cat});
         if (!sumByStore[store]) sumByStore[store] = {qty:0, net:0, items:new Set(), days:new Set()};
