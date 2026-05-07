@@ -2707,15 +2707,36 @@ async function downloadExcel() {
     return `${y}-${m}-${dd}`;
   };
 
+  // 진행 모달 (진행률, 속도, 잔여시간)
+  let modal = document.getElementById('excel-progress');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'excel-progress';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:inherit';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:22px 28px;min-width:380px;box-shadow:0 8px 24px rgba(0,0,0,.25)">
+        <div style="font-size:14px;font-weight:700;margin-bottom:14px;color:#1E293B">엑셀 다운로드 준비 중</div>
+        <div style="height:10px;background:#E5E7EB;border-radius:5px;overflow:hidden;margin-bottom:10px">
+          <div id="excel-bar" style="height:100%;background:linear-gradient(90deg,#10B981,#059669);width:0;transition:width .3s"></div>
+        </div>
+        <div id="excel-status" style="font-size:12px;color:#64748B;display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span id="excel-line1">준비 중...</span>
+          <span id="excel-line2" style="font-variant-numeric:tabular-nums"></span>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  const bar    = document.getElementById('excel-bar');
+  const line1  = document.getElementById('excel-line1');
+  const line2  = document.getElementById('excel-line2');
+  const t0 = Date.now();
+
   // daily fetch (배치 50개씩 동시)
-  const btn = document.getElementById('btnExcel');
-  const origText = btn ? btn.innerHTML : '';
-  if (btn) btn.innerHTML = `<span>⏳</span><span>다운로드 준비 중...</span>`;
-  const dailyData = []; // [{date, items: [{store, item, qty, net, cat_*}]}]
+  const dailyData = [];
   const BATCH = 50;
   for (let i = 0; i < dates.length; i += BATCH) {
     const batch = dates.slice(i, i + BATCH);
-    if (btn) btn.innerHTML = `<span>⏳</span><span>${i}/${dates.length}일</span>`;
     const results = await Promise.all(batch.map(async d => {
       try {
         const r = await fetch(DATA_BASE_URL + 'daily/' + yymd(d) + '.json');
@@ -2725,8 +2746,19 @@ async function downloadExcel() {
       } catch { return null; }
     }));
     results.filter(Boolean).forEach(x => dailyData.push(x));
+    const cur = Math.min(i + BATCH, dates.length);
+    const pct = dates.length > 0 ? cur/dates.length*100 : 0;
+    const elapsed = (Date.now() - t0) / 1000;
+    const speed = cur > 0 ? cur/elapsed : 0;
+    const remaining = speed > 0 ? (dates.length-cur)/speed : 0;
+    bar.style.width = pct.toFixed(1) + '%';
+    line1.textContent = `${cur}/${dates.length}일 (${pct.toFixed(0)}%) · ${speed.toFixed(0)}일/초`;
+    line2.textContent = `경과 ${elapsed.toFixed(0)}s · 잔여 ${remaining.toFixed(0)}s`;
+    await new Promise(r => setTimeout(r, 0));  // UI flush
   }
-  if (btn) btn.innerHTML = `<span>⏳</span><span>엑셀 생성 중...</span>`;
+  bar.style.width = '100%';
+  line1.textContent = '엑셀 파일 생성 중...';
+  line2.textContent = `${dates.length}/${dates.length}일`;
   await new Promise(r => setTimeout(r, 50));
 
   // 매장 필터
@@ -2803,7 +2835,8 @@ async function downloadExcel() {
     XLSX.utils.book_append_sheet(wb, ws, s.length > 28 ? s.slice(0,28) : s);
   });
 
-  if (btn) btn.innerHTML = origText;
+  // 모달 닫기
+  if (modal) modal.style.display = 'none';
 
   // 파일명: 기간 라벨 사용
   let fname = '인크커피_상품매출';
