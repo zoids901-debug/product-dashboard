@@ -47,6 +47,66 @@ TOSS_MERCHANT_ID = 304265
 
 
 # ── GitHub ───────────────────────────────────────
+
+
+# ── 카테고리 보강: 누적 매핑표 + 키워드 fallback ──
+import re as _re_cat
+_MANUAL_CAT_MAP = None
+def _load_manual_cat_map():
+    """data/manual_cat_map.json — 모든 월에서 누적된 메뉴↔카테고리 매핑. 1회 로드 후 캐시."""
+    global _MANUAL_CAT_MAP
+    if _MANUAL_CAT_MAP is not None:
+        return _MANUAL_CAT_MAP
+    _, content = gh_get('data/manual_cat_map.json')
+    if content is None:
+        _MANUAL_CAT_MAP = {}
+    else:
+        _MANUAL_CAT_MAP = json.loads(content)
+    return _MANUAL_CAT_MAP
+def _norm_cat_key(s): return _re_cat.sub(r'[\s\W_]+','', s or '').lower()
+
+# 키워드 fallback 룰 (운정 등 TOSS·카테고리 누락 메뉴용)
+_FALLBACK_CAT_RULES = [
+    (r'아메리카노|에스프레소|콜드브루|드립',                   ('음료','공통','커피')),
+    (r'라떼|마끼아또|모카|카푸치노|플랫화이트',                ('음료','공통','커피')),
+    (r'에이드',                                              ('음료','공통','에이드')),
+    (r'블렌디드|프라페|스무디|쉐이크',                        ('음료','공통','논커피')),
+    (r'^(?:.*\s)?티$|티(?:[\s]|$)|차(?:[\s]|$)|허브티|우롱', ('음료','공통','차')),
+    (r'주스|쥬스',                                           ('음료','공통','논커피')),
+    (r'밀크|초콜릿|쇼콜라|핫초코|코코아',                      ('음료','공통','논커피')),
+    (r'케이크|타르트|마카롱|마들렌|휘낭시에|쿠키|브라우니|푸딩|크림빵', ('베이커리','디저트','디저트')),
+    (r'크루아상|퀸아망|크라핀|페이스트리',                      ('베이커리','빵','크루아상류')),
+    (r'소금빵',                                              ('베이커리','빵','소금빵')),
+    (r'깜빠뉴|바게트|식빵|치아바타|포카치아|호밀빵|곡물빵',      ('베이커리','빵','식사빵')),
+    (r'샌드위치|토스트|파니니|버거|핫도그',                     ('베이커리','샌드위치','샌드위치')),
+    (r'베이글|스콘|머핀|도넛|크럼블|롤케익|롤케이크',            ('베이커리','빵','디저트빵')),
+    (r'빵|번|롤|단팥|모카빵',                                 ('베이커리','빵','빵')),
+    (r'증정|사은품|쿠폰|상품권',                              ('MD/기타','판촉','증정')),
+    (r'리유저블백|에코백|머그|텀블러|컵|굿즈',                  ('MD/기타','MD','굿즈')),
+    (r'원두|드립백|패키지',                                   ('MD/기타','MD','원두')),
+]
+def _fallback_cat(name):
+    n = name or ''
+    for pat, (b,m,s) in _FALLBACK_CAT_RULES:
+        if _re_cat.search(pat, n):
+            return {'cat_big':b,'cat_mid':m,'cat_small':s}
+    return None
+
+def _resolve_cat(nm, cat_map, daily_cat):
+    """우선순위: 이번달 cat_map > MANUAL_MAP(누적) > daily_cat(OKPOS) > 키워드 fallback > 빈값."""
+    if nm in cat_map: return cat_map[nm]
+    mm = _load_manual_cat_map()
+    if nm in mm: return mm[nm]
+    nk = _norm_cat_key(nm)
+    if nk:
+        for k,v in mm.items():
+            if _norm_cat_key(k) == nk: return v
+    if daily_cat: return daily_cat
+    fb = _fallback_cat(nm)
+    if fb: return fb
+    return {'cat_big':'','cat_mid':'','cat_small':''}
+# ── /카테고리 보강 끝 ──
+
 def gh_get(path):
     api = f'https://api.github.com/repos/{GH_REPO}/contents/{path}'
     try:
@@ -255,7 +315,7 @@ def rebuild_month(year, month):
     items_out = []
     for (store, nm), v in agg.items():
         # 우선순위: 기존 월별 cat_map (수동 보정 보존) > daily 학습 cat (OKPOS 자동) > 빈값
-        cat = cat_map.get(nm) or v.get('daily_cat') or {'cat_big':'','cat_mid':'','cat_small':''}
+        cat = _resolve_cat(nm, cat_map, v.get('daily_cat'))
         items_out.append({'store':store,'item':nm,'qty':v['qty'],'net':v['net'],**cat})
     out = {'items': items_out}
     now = date.today()
