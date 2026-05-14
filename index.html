@@ -497,6 +497,13 @@ let STORES = ['전체'];
 const BIG_COLORS = {'음료':'#0984e3','베이커리':'#e17055','MD/기타':'#00b894','푸드':'#fdcb6e'};
 
 const BIG_ORDER = ['음료','베이커리','푸드','MD/기타'];
+// 차트의 'MD/기타' 그룹: BIG_ORDER에 없는 모든 cat_big (매장메뉴/빈값/기타) + 'MD/기타' 자체
+function groupBig(cb) { return BIG_ORDER.includes(cb) ? cb : 'MD/기타'; }
+function matchBig(rowCb, filterBig) {
+  if (filterBig === '전체') return true;
+  if (filterBig === 'MD/기타') return !['음료','베이커리','푸드'].includes(rowCb);
+  return rowCb === filterBig;
+}
 
 let catExpanded = {};
 
@@ -930,7 +937,7 @@ function updateABC() {
 
   // 대분류 필터 버튼
 
-  const bigOpts = ['전체',...BIG_ORDER.filter(b=>d.some(r=>r.cat_big===b))];
+  const bigOpts = ['전체',...BIG_ORDER.filter(b => d.some(r => matchBig(r.cat_big, b)))];
 
   renderFilterBtns('abc-cat-filters', bigOpts, abcCatBig, 'setAbcBig');
 
@@ -952,7 +959,7 @@ function updateABC() {
 
   let dForSmall = d;
 
-  if(abcCatBig!=='전체') dForSmall = dForSmall.filter(r=>r.cat_big===abcCatBig);
+  if(abcCatBig!=='전체') dForSmall = dForSmall.filter(r=>matchBig(r.cat_big, abcCatBig));
 
   if(abcCatMid!=='전체') dForSmall = dForSmall.filter(r=>r.cat_mid===abcCatMid);
 
@@ -985,7 +992,7 @@ function updateABC() {
 
   let fd = d;
 
-  if(abcCatBig!=='전체') fd = fd.filter(r=>r.cat_big===abcCatBig);
+  if(abcCatBig!=='전체') fd = fd.filter(r=>matchBig(r.cat_big, abcCatBig));
 
   if(abcCatMid!=='전체') fd = fd.filter(r=>r.cat_mid===abcCatMid);
 
@@ -1785,7 +1792,7 @@ function updateStoreTops() {
 
   // 대분류 필터 버튼
 
-  const bigOpts = ['전체',...BIG_ORDER.filter(b=>RAW.some(r=>r.cat_big===b))];
+  const bigOpts = ['전체',...BIG_ORDER.filter(b => RAW.some(r => matchBig(r.cat_big, b)))];
 
   renderFilterBtns('top-cat-filters', bigOpts, topCatBig, 'setTopBig');
 
@@ -1823,7 +1830,7 @@ function updateStoreTops() {
 
     let sd = RAW.filter(r=>r.store===store);
 
-    if(topCatBig!=='전체') sd = sd.filter(r=>r.cat_big===topCatBig);
+    if(topCatBig!=='전체') sd = sd.filter(r=>matchBig(r.cat_big, topCatBig));
 
     if(topCatMid!=='전체') sd = sd.filter(r=>r.cat_mid===topCatMid);
 
@@ -1891,7 +1898,7 @@ function updateStoreTops() {
 
       let sd = RAW.filter(r=>r.store===store);
 
-      if(topCatBig!=='전체') sd = sd.filter(r=>r.cat_big===topCatBig);
+      if(topCatBig!=='전체') sd = sd.filter(r=>matchBig(r.cat_big, topCatBig));
 
       if(topCatMid!=='전체') sd = sd.filter(r=>r.cat_mid===topCatMid);
 
@@ -1971,7 +1978,7 @@ function updateMatrix() {
 
   // 대분류 필터 버튼
 
-  const bigOpts = ['전체',...BIG_ORDER.filter(b=>d.some(r=>r.cat_big===b))];
+  const bigOpts = ['전체',...BIG_ORDER.filter(b => d.some(r => matchBig(r.cat_big, b)))];
 
   renderFilterBtns('mx-cat-filters', bigOpts, mxCatBig, 'setMxBig');
 
@@ -1979,7 +1986,7 @@ function updateMatrix() {
 
   let fd = d;
 
-  if(mxCatBig!=='전체') fd = fd.filter(r=>r.cat_big===mxCatBig);
+  if(mxCatBig!=='전체') fd = fd.filter(r=>matchBig(r.cat_big, mxCatBig));
 
   // 아이템별 집계
 
