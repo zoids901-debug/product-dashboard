@@ -64,7 +64,8 @@ def _load_manual_cat_map():
     if not content:
         _MANUAL_CAT_MAP = {'global':{},'byStore':{}}
     else:
-        m = json.loads(content)
+        # gh_get은 이미 parsed JSON(dict)을 반환 — 추가 파싱 불필요
+        m = content if isinstance(content, dict) else json.loads(content)
         # v1(=평면 dict)는 global로 흡수
         if m.get('_format') == 'v2':
             _MANUAL_CAT_MAP = m
