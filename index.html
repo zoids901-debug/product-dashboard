@@ -824,10 +824,15 @@ function updateStoreCompare() {
     if(total===0) return;
 
     const byBig = {};
+    const bigMids = {};      // cat → {cat_mid → net}
+    const bigItems = {};     // cat → {item → net}
 
     sd.forEach(r=>{
       const cat = BIG_ORDER.includes(r.cat_big) ? r.cat_big : 'MD/기타';
       byBig[cat] = (byBig[cat]||0) + r.net;
+      const mid = r.cat_mid || '(미분류)';
+      (bigMids[cat] = bigMids[cat] || {})[mid] = (bigMids[cat][mid]||0) + r.net;
+      (bigItems[cat] = bigItems[cat] || {})[r.item] = (bigItems[cat][r.item]||0) + r.net;
     });
 
     html += `<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;margin-bottom:3px">${store} <span style="color:#888;font-weight:400">${M(total)}</span></div>`;
@@ -842,7 +847,13 @@ function updateStoreCompare() {
 
       if(pct<=0) return;
 
-      html += `<div style="width:${pct}%;background:${BIG_COLORS[cat]}" title="${cat} ${comma(v)}원 (${P(v,total)})">${pct>8?P(v,total):''}</div>`;
+      // 세부 분포 (cat_mid Top 5 + 상품 Top 5)
+      const midList = Object.entries(bigMids[cat]||{}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const itemList = Object.entries(bigItems[cat]||{}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const midStr = midList.length ? '\n[중분류]\n' + midList.map(([m,n])=>`  ${m}: ${comma(n)}원 (${P(n,v)})`).join('\n') : '';
+      const itemStr = itemList.length ? '\n[상위 상품]\n' + itemList.map(([i,n],idx)=>`  ${idx+1}. ${i}: ${comma(n)}원 (${P(n,v)})`).join('\n') : '';
+      const tip = `${cat} ${comma(v)}원 (${P(v,total)})${midStr}${itemStr}`;
+      html += `<div style="width:${pct}%;background:${BIG_COLORS[cat]};cursor:help" title="${tip.replace(/"/g,'&quot;')}">${pct>8?P(v,total):''}</div>`;
 
     });
 
