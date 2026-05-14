@@ -53,15 +53,23 @@ TOSS_MERCHANT_ID = 304265
 import re as _re_cat
 _MANUAL_CAT_MAP = None
 def _load_manual_cat_map():
-    """data/manual_cat_map.json — 모든 월에서 누적된 메뉴↔카테고리 매핑. 1회 로드 후 캐시."""
+    """data/manual_cat_map.json — v2 형식 {global, byStore}. 1회 로드 후 캐시."""
     global _MANUAL_CAT_MAP
     if _MANUAL_CAT_MAP is not None:
         return _MANUAL_CAT_MAP
-    _, content = gh_get('data/manual_cat_map.json')
-    if content is None:
-        _MANUAL_CAT_MAP = {}
+    try:
+        _, content = gh_get('data/manual_cat_map.json')
+    except Exception:
+        content = None
+    if not content:
+        _MANUAL_CAT_MAP = {'global':{},'byStore':{}}
     else:
-        _MANUAL_CAT_MAP = json.loads(content)
+        m = json.loads(content)
+        # v1(=평면 dict)는 global로 흡수
+        if m.get('_format') == 'v2':
+            _MANUAL_CAT_MAP = m
+        else:
+            _MANUAL_CAT_MAP = {'global': m, 'byStore': {}}
     return _MANUAL_CAT_MAP
 def _norm_cat_key(s): return _re_cat.sub(r'[\s\W_]+','', s or '').lower()
 
@@ -92,16 +100,22 @@ def _fallback_cat(name):
             return {'cat_big':b,'cat_mid':m,'cat_small':s}
     return None
 
-def _resolve_cat(nm, cat_map, daily_cat):
-    """우선순위: 이번달 cat_map > MANUAL_MAP(누적) > daily_cat(OKPOS) > 키워드 fallback > 빈값."""
+def _resolve_cat(nm, cat_map, daily_cat, store=None):
+    """우선순위: 이번달 cat_map > 매장별 매핑 > daily_cat(OKPOS) > 글로벌 매핑(다수결) > 키워드 fallback > 빈값."""
     if nm in cat_map: return cat_map[nm]
     mm = _load_manual_cat_map()
-    if nm in mm: return mm[nm]
+    store_map = (mm.get('byStore') or {}).get(store or '', {}) if store else {}
+    if nm in store_map: return store_map[nm]
     nk = _norm_cat_key(nm)
     if nk:
-        for k,v in mm.items():
+        for k,v in store_map.items():
             if _norm_cat_key(k) == nk: return v
     if daily_cat: return daily_cat
+    gm = mm.get('global') or {}
+    if nm in gm: return gm[nm]
+    if nk:
+        for k,v in gm.items():
+            if _norm_cat_key(k) == nk: return v
     fb = _fallback_cat(nm)
     if fb: return fb
     return {'cat_big':'','cat_mid':'','cat_small':''}
@@ -315,7 +329,7 @@ def rebuild_month(year, month):
     items_out = []
     for (store, nm), v in agg.items():
         # 우선순위: 기존 월별 cat_map (수동 보정 보존) > daily 학습 cat (OKPOS 자동) > 빈값
-        cat = _resolve_cat(nm, cat_map, v.get('daily_cat'))
+        cat = _resolve_cat(nm, cat_map, v.get('daily_cat'), store=store)
         items_out.append({'store':store,'item':nm,'qty':v['qty'],'net':v['net'],**cat})
     out = {'items': items_out}
     now = date.today()
