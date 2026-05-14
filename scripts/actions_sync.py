@@ -221,55 +221,83 @@ def normalize_name(name):
 
 
 # ── TOSS ──────────────────────────────────────────
-async def toss_login():
-    """playwright UI 로그인 → API 호출 캡쳐로 헤더 추출"""
-    print('[TOSS] 로그인 중...', flush=True)
-    captured = {}
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        ctx = await browser.new_context()
-        page = await ctx.new_page()
+async def toss_login(attempts=2):
+    """playwright UI 로그인 → API 호출 캡쳐로 헤더 추출.
+    1회 실패 시 재시도 (네트워크/타이밍 이슈 대응)."""
+    last_err = None
+    for try_i in range(1, attempts + 1):
+        print(f'[TOSS] 로그인 중 (시도 {try_i}/{attempts})...', flush=True)
+        captured = {}
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                ctx = await browser.new_context()
+                page = await ctx.new_page()
 
-        async def on_req(req):
-            if 'api-public.tossplace.com' in req.url and 'login' not in req.url:
-                try:
-                    h = await req.all_headers()
-                except: return
-                auth = h.get('authorization')
-                wpid = h.get('toss-workplace-id')
-                if auth and 'Bearer' in auth and wpid:
-                    captured['headers'] = {
-                        'Authorization': auth if auth.startswith('Bearer') else 'Bearer '+auth,
-                        'toss-workplace-id': wpid,
-                        'toss-place-user-id': h.get('toss-place-user-id', ''),
-                        'Content-Type': 'application/json',
-                        'User-Agent': h.get('user-agent', 'Mozilla/5.0'),
-                    }
-        page.on('request', on_req)
+                async def on_req(req):
+                    if 'api-public.tossplace.com' in req.url and 'login' not in req.url:
+                        try:
+                            h = await req.all_headers()
+                        except: return
+                        auth = h.get('authorization')
+                        wpid = h.get('toss-workplace-id')
+                        if auth and 'Bearer' in auth and wpid:
+                            captured['headers'] = {
+                                'Authorization': auth if auth.startswith('Bearer') else 'Bearer '+auth,
+                                'toss-workplace-id': wpid,
+                                'toss-place-user-id': h.get('toss-place-user-id', ''),
+                                'Content-Type': 'application/json',
+                                'User-Agent': h.get('user-agent', 'Mozilla/5.0'),
+                            }
+                page.on('request', on_req)
 
-        await page.goto('https://dashboard.tossplace.com/login', wait_until='networkidle', timeout=30000)
-        await page.wait_for_selector('input[autocomplete="username"]', timeout=10000)
-        await page.fill('input[autocomplete="username"]', TOSS_ID)
-        await page.fill('input[autocomplete="current-password"]', TOSS_PW)
-        await page.click('button[type="submit"]')
+                await page.goto('https://dashboard.tossplace.com/login', wait_until='networkidle', timeout=45000)
+                await page.wait_for_selector('input[autocomplete="username"]', timeout=20000)
+                await page.fill('input[autocomplete="username"]', TOSS_ID)
+                await page.fill('input[autocomplete="current-password"]', TOSS_PW)
+                await page.click('button[type="submit"]')
 
-        # 로그인 후 dashboard 진입 대기 + headers 캡쳐 대기
-        for _ in range(30):
-            await asyncio.sleep(1)
-            if 'headers' in captured: break
-        # 추가로 페이지 한번 navigate해서 headers 확실히 캡쳐
-        if 'headers' not in captured:
-            try:
-                await page.goto('https://dashboard.tossplace.com/sales-detail/item-sale', wait_until='networkidle', timeout=15000)
-                await asyncio.sleep(3)
-            except: pass
+                # 로그인 후 dashboard 진입 대기 + headers 캡쳐 대기 (60초)
+                for _ in range(60):
+                    await asyncio.sleep(1)
+                    if 'headers' in captured: break
 
-        await browser.close()
+                # 못 잡았으면 여러 메뉴 navigate해서 API 호출 유도
+                if 'headers' not in captured:
+                    for url in [
+                        'https://dashboard.tossplace.com/sales-detail/item-sale',
+                        'https://dashboard.tossplace.com/sales/dashboard',
+                        'https://dashboard.tossplace.com/',
+                    ]:
+                        if 'headers' in captured: break
+                        try:
+                            await page.goto(url, wait_until='networkidle', timeout=20000)
+                            await asyncio.sleep(3)
+                        except Exception as e:
+                            print(f'  navigate {url} 경고: {type(e).__name__}', flush=True)
 
-    if 'headers' not in captured:
-        raise RuntimeError('TOSS 로그인 후 헤더 캡쳐 실패')
-    print(f'[TOSS] 완료 (workplace={captured["headers"]["toss-workplace-id"]})', flush=True)
-    return captured['headers']
+                # 실패 시 진단 정보 출력
+                if 'headers' not in captured:
+                    try:
+                        cur_url = page.url
+                        title = await page.title()
+                        body_len = len(await page.content())
+                        print(f'  진단: url={cur_url}, title={title!r}, body={body_len}자', flush=True)
+                    except: pass
+
+                await browser.close()
+
+            if 'headers' in captured:
+                print(f'[TOSS] 완료 (workplace={captured["headers"]["toss-workplace-id"]})', flush=True)
+                return captured['headers']
+            last_err = 'TOSS 로그인 후 헤더 캡쳐 실패'
+        except Exception as e:
+            last_err = f'{type(e).__name__}: {e}'
+            print(f'  시도 {try_i} 예외: {last_err}', flush=True)
+        if try_i < attempts:
+            await asyncio.sleep(5)
+
+    raise RuntimeError(last_err or 'TOSS 로그인 실패')
 
 
 def toss_fetch_day(headers, date_str):
