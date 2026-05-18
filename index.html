@@ -165,6 +165,30 @@ tr:hover td{background:#f8f9fb}
   .fbtn{padding:4px 9px;font-size:10.5px}
 }
 
+
+.mx-range-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:6px 0 10px; font-size:11px; }
+.mx-range { display:flex; align-items:center; gap:8px; flex:1; min-width:280px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:6px; padding:4px 10px; }
+.mx-range .rs-label { font-weight:700; min-width:50px; color:#374151; }
+.mx-range .rs-wrap { position:relative; flex:1; height:22px; }
+.mx-range .rs-wrap input[type=range] {
+  position:absolute; left:0; right:0; width:100%; pointer-events:none;
+  appearance:none; -webkit-appearance:none; background:transparent;
+  top:0; height:22px; margin:0; outline:none;
+}
+.mx-range .rs-wrap input[type=range]::-webkit-slider-thumb {
+  pointer-events:auto; appearance:none; -webkit-appearance:none;
+  width:14px; height:14px; border-radius:50%; background:#0984e3; border:2px solid #fff; cursor:pointer;
+  box-shadow:0 1px 3px rgba(0,0,0,0.25); margin-top:0;
+}
+.mx-range .rs-wrap input[type=range]::-moz-range-thumb {
+  pointer-events:auto; width:14px; height:14px; border-radius:50%; background:#0984e3; border:2px solid #fff; cursor:pointer;
+}
+.mx-range .rs-track { position:absolute; top:9px; left:7px; right:7px; height:4px; background:#dfe6e9; border-radius:2px; pointer-events:none; }
+.mx-range .rs-fill { position:absolute; top:0; height:100%; background:#0984e3; border-radius:2px; }
+.mx-range .rs-val { min-width:120px; text-align:right; font-variant-numeric:tabular-nums; color:#475569; font-size:11px; }
+.mx-range .rs-reset { background:#fff; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; font-size:10px; cursor:pointer; color:#475569; }
+.mx-range .rs-reset:hover { background:#f1f5f9; }
+
 </style>
 
 </head>
@@ -400,6 +424,30 @@ tr:hover td{background:#f8f9fb}
 
   <div id="mx-excl-panel" style="margin-bottom:8px"></div>
 
+  <div class="mx-range-row" id="mx-range-row">
+    <div class="mx-range">
+      <span class="rs-label">수량(X)</span>
+      <div class="rs-wrap">
+        <div class="rs-track"><div class="rs-fill" id="mx-x-fill"></div></div>
+        <input type="range" id="mx-x-min" min="0" max="100" value="0">
+        <input type="range" id="mx-x-max" min="0" max="100" value="100">
+      </div>
+      <span class="rs-val" id="mx-x-val">0 ~ 0</span>
+      <button class="rs-reset" onclick="resetMxRange('x')">리셋</button>
+    </div>
+    <div class="mx-range">
+      <span class="rs-label">건당(Y)</span>
+      <div class="rs-wrap">
+        <div class="rs-track"><div class="rs-fill" id="mx-y-fill"></div></div>
+        <input type="range" id="mx-y-min" min="0" max="100" value="0">
+        <input type="range" id="mx-y-max" min="0" max="100" value="100">
+      </div>
+      <span class="rs-val" id="mx-y-val">0 ~ 0</span>
+      <button class="rs-reset" onclick="resetMxRange('y')">리셋</button>
+    </div>
+  </div>
+
+
   <div class="grid2">
 
     <div style="position:relative;height:400px"><canvas id="chart-matrix"></canvas></div>
@@ -555,6 +603,7 @@ let mxCatBig = '전체';
 let mxExcludeBasic = true;       // 마스터 이상치 제외 토글
 
 let mxExcludeOverrides = new Set(); // 강제 포함 항목 (이상치여도 표시)
+let mxRange = { xMin:null, xMax:null, yMin:null, yMax:null };
 
 let mxTableSort = 'quad';        // 'quad' | 'qty' | 'net'
 
@@ -1953,6 +2002,54 @@ const BASE_MENU_PATTERNS = [
   '바닐라빈 라떼','바닐라빈라떼','바닐라빈 라때','바닐라빈라때',
 ];
 const BASE_MENU_SHARE_THRESHOLD = 2.5; // 매출/수량 비중 중 큰 값 기준
+function setupMxRange(axis, maxData) {
+  const minEl = document.getElementById('mx-'+axis+'-min');
+  const maxEl = document.getElementById('mx-'+axis+'-max');
+  const fillEl = document.getElementById('mx-'+axis+'-fill');
+  const valEl = document.getElementById('mx-'+axis+'-val');
+  if(!minEl || !maxEl) return;
+  maxData = Math.max(1, Math.ceil(maxData));
+  minEl.max = maxData;
+  maxEl.max = maxData;
+  const stored = (axis==='x') ? { mn:mxRange.xMin, mx:mxRange.xMax } : { mn:mxRange.yMin, mx:mxRange.yMax };
+  minEl.value = stored.mn===null ? 0 : Math.min(stored.mn, maxData);
+  maxEl.value = stored.mx===null ? maxData : Math.min(stored.mx, maxData);
+  const fmt = axis==='x' ? (v=>comma(Math.round(v))+'건') : (v=>v>=10000?Math.floor(v/10000)+'만':comma(Math.round(v))+'원');
+  function refresh() {
+    let mn = +minEl.value, mx = +maxEl.value;
+    const realMax = +minEl.max;
+    if(mn > mx) {
+      if(window.event && window.event.target === minEl) { mx = mn; maxEl.value = mx; }
+      else { mn = mx; minEl.value = mn; }
+    }
+    if(fillEl) {
+      fillEl.style.left = (mn/realMax*100) + '%';
+      fillEl.style.width = ((mx-mn)/realMax*100) + '%';
+    }
+    if(valEl) valEl.textContent = fmt(mn) + ' ~ ' + fmt(mx);
+    if(axis==='x') {
+      mxRange.xMin = mn > 0 ? mn : null;
+      mxRange.xMax = mx < realMax ? mx : null;
+    } else {
+      mxRange.yMin = mn > 0 ? mn : null;
+      mxRange.yMax = mx < realMax ? mx : null;
+    }
+  }
+  if(!minEl.dataset.bound) {
+    minEl.addEventListener('input', ()=>{ refresh(); updateMatrix(); });
+    maxEl.addEventListener('input', ()=>{ refresh(); updateMatrix(); });
+    minEl.dataset.bound = '1';
+    maxEl.dataset.bound = '1';
+  }
+  refresh();
+}
+
+function resetMxRange(axis) {
+  if(axis==='x') { mxRange.xMin = null; mxRange.xMax = null; }
+  else { mxRange.yMin = null; mxRange.yMax = null; }
+  updateMatrix();
+}
+
 function detectOutliers(itemList) {
   const totalNet = itemList.reduce((s,i)=>s+(i.net||0), 0);
   const totalQty = itemList.reduce((s,i)=>s+(i.qty||0), 0);
@@ -2117,6 +2214,16 @@ function updateMatrix() {
     }
 
   }
+
+  // ── 슬라이더 셋업 + 필터 적용 (이상치 제거 후) ──
+  const _xMaxData = list.length ? Math.max(...list.map(i=>i.qty)) : 100;
+  const _yMaxData = list.length ? Math.max(...list.map(i=>i.avg)) : 100;
+  setupMxRange('x', _xMaxData);
+  setupMxRange('y', _yMaxData);
+  if(mxRange.xMin !== null) list = list.filter(i=>i.qty >= mxRange.xMin);
+  if(mxRange.xMax !== null) list = list.filter(i=>i.qty <= mxRange.xMax);
+  if(mxRange.yMin !== null) list = list.filter(i=>i.avg >= mxRange.yMin);
+  if(mxRange.yMax !== null) list = list.filter(i=>i.avg <= mxRange.yMax);
 
   if(list.length===0) {
 
