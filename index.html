@@ -2486,7 +2486,10 @@ async function loadRange(fromFile, toFile) {
         return ov ? {...r, store: normStore(r.store), ...ov} : {...r, store: normStore(r.store)};
       });
 
-    const activeStores = [...new Set(allItems.map(r => r.store))].sort();
+    const STORE_ORDER_STD = ['하남','다산','가산','수원','광주','운정'];
+    const _present = [...new Set(allItems.map(r => r.store))];
+    const activeStores = STORE_ORDER_STD.filter(s => _present.includes(s))
+        .concat(_present.filter(s => !STORE_ORDER_STD.includes(s)));
 
     RAW = allItems;
 
@@ -2642,7 +2645,10 @@ async function loadDailyRange(startDate, endDate) {
       }
     });
 
-    const activeStores = [...new Set(allItems.map(r => r.store))].sort();
+    const STORE_ORDER_STD = ['하남','다산','가산','수원','광주','운정'];
+    const _present = [...new Set(allItems.map(r => r.store))];
+    const activeStores = STORE_ORDER_STD.filter(s => _present.includes(s))
+        .concat(_present.filter(s => !STORE_ORDER_STD.includes(s)));
 
     RAW = allItems;
     STORES = ['전체', ...activeStores];
