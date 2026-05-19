@@ -1,0 +1,124 @@
+[
+  {
+    "date": "2026-05-19",
+    "code": "V09651",
+    "loc": "가산",
+    "rows": 138,
+    "sample_keys": [
+      "SALE_QTY",
+      "TOT_DC_AMT",
+      "LCLS_CD",
+      "DCM_SALE_AMT",
+      "DC_AMT_SVC",
+      "DC_AMT_CPN",
+      "SHOP_CD",
+      "MCLS_NM",
+      "TOT_SALE_AMT",
+      "PROD_CD"
+    ],
+    "sample_prod": "--------------"
+  },
+  {
+    "date": "2026-05-19",
+    "code": "V67293",
+    "loc": "다산",
+    "rows": 146,
+    "sample_keys": [
+      "SALE_QTY",
+      "TOT_DC_AMT",
+      "LCLS_CD",
+      "DCM_SALE_AMT",
+      "DC_AMT_SVC",
+      "DC_AMT_CPN",
+      "SHOP_CD",
+      "MCLS_NM",
+      "TOT_SALE_AMT",
+      "PROD_CD"
+    ],
+    "sample_prod": "인크로쉐"
+  },
+  {
+    "date": "2026-05-19",
+    "code": "V67295",
+    "loc": "다산",
+    "rows": 19,
+    "sample_keys": [
+      "SALE_QTY",
+      "TOT_DC_AMT",
+      "LCLS_CD",
+      "DCM_SALE_AMT",
+      "DC_AMT_SVC",
+      "DC_AMT_CPN",
+      "SHOP_CD",
+      "MCLS_NM",
+      "TOT_SALE_AMT",
+      "PROD_CD"
+    ],
+    "sample_prod": "기프트카드2"
+  },
+  {
+    "date": "2026-05-19",
+    "code": "V68581",
+    "loc": "수원",
+    "rows": 0,
+    "sample_keys": [],
+    "sample_prod": ""
+  },
+  {
+    "date": "2026-05-19",
+    "code": "V00555",
+    "loc": "하남",
+    "rows": 51,
+    "sample_keys": [
+      "SALE_QTY",
+      "TOT_DC_AMT",
+      "LCLS_CD",
+      "DCM_SALE_AMT",
+      "DC_AMT_SVC",
+      "DC_AMT_CPN",
+      "SHOP_CD",
+      "MCLS_NM",
+      "TOT_SALE_AMT",
+      "PROD_CD"
+    ],
+    "sample_prod": "진동벨 1"
+  },
+  {
+    "date": "2026-05-19",
+    "code": "V70577",
+    "loc": "광주",
+    "rows": 117,
+    "sample_keys": [
+      "SALE_QTY",
+      "TOT_DC_AMT",
+      "LCLS_CD",
+      "DCM_SALE_AMT",
+      "DC_AMT_SVC",
+      "DC_AMT_CPN",
+      "SHOP_CD",
+      "MCLS_NM",
+      "TOT_SALE_AMT",
+      "PROD_CD"
+    ],
+    "sample_prod": "디카페인변경"
+  },
+  {
+    "date": "2026-05-19",
+    "code": "V70585",
+    "loc": "광주",
+    "rows": 26,
+    "sample_keys": [
+      "SALE_QTY",
+      "TOT_DC_AMT",
+      "LCLS_CD",
+      "DCM_SALE_AMT",
+      "DC_AMT_SVC",
+      "DC_AMT_CPN",
+      "SHOP_CD",
+      "MCLS_NM",
+      "TOT_SALE_AMT",
+      "PROD_CD"
+    ],
+    "sample_prod": "INC리유저블백(M)O"
+  }
+]
