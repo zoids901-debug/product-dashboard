@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
-"""상품 데이터 검증용 OK포스 백필 — 매장×상품 1년치 합계 raw.
-- actions_sync.py의 okpos_login 재사용
-- okpos_fetch_day의 date1_1=시작일, date1_2=끝일 인자로 일자 범위 fetch 시도
-- 1년 범위로 받으면 결과는 매장×상품 누적 합 (또는 일별 합)
-
-출력: data/raw_okpos_yearly/{YYYY}.json
+"""상품 검증용 OK포스 backfill — 매장×상품 합계 raw.
+- 연 단위(YYYY) 또는 단일 월(YYYY-MM) 인자 지원
+- actions_sync.py의 okpos_login + STORES + API_URL 재사용
+- 결과: data/raw_okpos_yearly/{YYYY}.json 또는 data/raw_okpos_monthly/{YYYY-MM}.json
 """
-import sys, os, json, asyncio
+import sys, os, json, asyncio, calendar
 from pathlib import Path
 from datetime import date
 
@@ -15,8 +13,6 @@ from actions_sync import okpos_login, STORES, API_URL
 
 
 def okpos_fetch_range(session, csrf, savename, date_from, date_to, code, name):
-    """okpos_fetch_day의 일자 범위 버전.
-    date1_1, date1_2를 다르게 주고 date_period1='1' (또는 기간) 시도."""
     shop_info = json.dumps([{"SHOP_CD": code, "SHOP_NM": name}])
     data = {
         csrf["key"]: csrf["val"],
@@ -36,158 +32,103 @@ def okpos_fetch_range(session, csrf, savename, date_from, date_to, code, name):
     return r.get("Data", [])
 
 
-async def fetch_year(year):
-    print(f'\n=== {year}년 상품 OK포스 fetch ===')
-    today = date.today()
-    end_date = date(year, 12, 31)
-    if end_date > today:
-        end_date = today
-    start_iso = f'{year}-01-01'
-    end_iso = end_date.isoformat()
-    print(f'기간: {start_iso} ~ {end_iso}')
+async def _fetch_period(start_iso, end_iso, out_path, label):
+    print()
+    print("=== " + label + " ===")
+    print("기간: " + start_iso + " ~ " + end_iso)
 
     session, csrf, savename = await okpos_login()
-    print(f'  로그인 OK')
+    print("  로그인 OK")
 
-    result = {
-        "year": str(year),
-        "period": [start_iso, end_iso],
-        "stores": {},
-        "totals": {},
-    }
-
-    locations_done = set()  # 매장명 기준 (다산 1층/지하 같은 다중 코드 처리)
+    stores_data = {}
     for si in STORES.values():
-        loc = si['location']
-        code = si['code']
-        name = si['name']
+        loc = si["location"]
+        code = si["code"]
+        name = si["name"]
         try:
-            print(f'  fetch [{loc}/{name}] {code}...', flush=True)
+            print("  fetch [" + loc + "/" + name + "] " + code + "...", flush=True)
             rows = okpos_fetch_range(session, csrf, savename, start_iso, end_iso, code, name)
-            print(f'    → {len(rows)}건')
-            if loc not in result["stores"]:
-                result["stores"][loc] = {}
-            # 매장 안에서 같은 상품명이면 합산 (다중 코드/일자 누적)
-            bucket = result["stores"][loc]
+            print("    -> " + str(len(rows)) + "건")
+            if loc not in stores_data:
+                stores_data[loc] = {}
+            bucket = stores_data[loc]
             for row in rows:
-                item = (row.get('PROD_NM') or '').strip()
+                item = (row.get("PROD_NM") or "").strip()
                 if not item: continue
-                qty = int(row.get('SALE_QTY') or 0)
-                net = int(row.get('TOT_SALE_AMT') or 0)
+                qty = int(row.get("SALE_QTY") or 0)
+                net = int(row.get("TOT_SALE_AMT") or 0)
                 if item not in bucket:
                     bucket[item] = {"qty": 0, "net": 0}
                 bucket[item]["qty"] += qty
                 bucket[item]["net"] += net
         except Exception as e:
-            print(f'    ✗ 실패: {e}')
+            print("    실패: " + str(e))
 
-    # 매장별 totals
-    for loc, items in result["stores"].items():
-        qty_sum = sum(v["qty"] for v in items.values())
-        net_sum = sum(v["net"] for v in items.values())
-        result["totals"][loc] = {
-            "item_count": len(items),
-            "qty_sum": qty_sum,
-            "net_sum": net_sum,
-        }
-
-    # 저장
-    out_dir = Path('data/raw_okpos_yearly')
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{year}.json'
-    # stores를 list로 변환 (dict 정렬 + JSON 가독성)
-    out_data = {
-        "year": result["year"],
-        "period": result["period"],
-        "totals": result["totals"],
-        "stores": {loc: [{"item": k, **v} for k, v in sorted(items.items(), key=lambda x: -x[1]["net"])]
-                   for loc, items in result["stores"].items()},
-    }
-    out_path.write_text(json.dumps(out_data, ensure_ascii=False, indent=2), encoding='utf-8')
-
-    print(f'\n=== 매장별 합계 ===')
-    for loc, t in result["totals"].items():
-        print(f'  {loc}: 상품 {t["item_count"]}개 / qty {t["qty_sum"]:,} / net {t["net_sum"]:,}')
-    print(f'\n→ 저장: {out_path}')
-    return True
-
-
-async def fetch_month(yyyy_mm):
-    """단일 월 fetch — 진단용."""
-    from datetime import date as _date
-    import calendar as _cal
-    y, m = map(int, yyyy_mm.split('-'))
-    today = _date.today()
-    last_day = _cal.monthrange(y, m)[1]
-    if y == today.year and m == today.month:
-        last_day = today.day
-    start_iso = f'{y:04d}-{m:02d}-01'
-    end_iso = f'{y:04d}-{m:02d}-{last_day:02d}'
-    print(f'
-=== {yyyy_mm} 월 단위 fetch ===')
-    print(f'기간: {start_iso} ~ {end_iso}')
-
-    session, csrf, savename = await okpos_login()
-    print('  로그인 OK')
-
-    result = {"year_month": yyyy_mm, "period": [start_iso, end_iso], "stores": {}, "totals": {}}
-    for si in STORES.values():
-        loc = si['location']
-        try:
-            rows = okpos_fetch_range(session, csrf, savename, start_iso, end_iso, si['code'], si['name'])
-            if loc not in result["stores"]:
-                result["stores"][loc] = {}
-            bucket = result["stores"][loc]
-            for row in rows:
-                item = (row.get('PROD_NM') or '').strip()
-                if not item: continue
-                qty = int(row.get('SALE_QTY') or 0)
-                net = int(row.get('TOT_SALE_AMT') or 0)
-                if item not in bucket:
-                    bucket[item] = {"qty":0,"net":0}
-                bucket[item]["qty"] += qty
-                bucket[item]["net"] += net
-        except Exception as e:
-            print(f'    {loc} 실패: {e}')
-
-    for loc, items in result["stores"].items():
-        result["totals"][loc] = {
+    totals = {}
+    for loc, items in stores_data.items():
+        totals[loc] = {
             "item_count": len(items),
             "qty_sum": sum(v["qty"] for v in items.values()),
             "net_sum": sum(v["net"] for v in items.values()),
         }
 
-    out_dir = Path('data/raw_okpos_monthly')
+    out_dir = out_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{yyyy_mm}.json'
-    out_data = {"yyyy_mm": yyyy_mm, "period": result["period"], "totals": result["totals"],
-                "stores": {loc: [{"item": k, **v} for k, v in sorted(items.items(), key=lambda x: -x[1]["net"])]
-                           for loc, items in result["stores"].items()}}
-    out_path.write_text(json.dumps(out_data, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f'
-=== 매장별 합 ===')
-    for loc, t in result["totals"].items():
-        print(f'  {loc}: 상품 {t["item_count"]}개 / qty {t["qty_sum"]:,} / net {t["net_sum"]:,}')
-    print(f'
-→ 저장: {out_path}')
+    out_data = {
+        "period": [start_iso, end_iso],
+        "totals": totals,
+        "stores": {loc: [{"item": k, **v} for k, v in sorted(items.items(), key=lambda x: -x[1]["net"])]
+                   for loc, items in stores_data.items()},
+    }
+    out_path.write_text(json.dumps(out_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print()
+    print("=== 매장별 합 ===")
+    for loc, t in totals.items():
+        print("  " + loc + ": 상품 " + str(t["item_count"]) + "개 / qty " + format(t["qty_sum"], ",") + " / net " + format(t["net_sum"], ","))
+    print()
+    print("-> 저장: " + str(out_path))
     return True
+
+
+async def fetch_year(year):
+    today = date.today()
+    end_date = date(year, 12, 31)
+    if end_date > today:
+        end_date = today
+    start_iso = str(year) + "-01-01"
+    end_iso = end_date.isoformat()
+    out_path = Path("data/raw_okpos_yearly") / (str(year) + ".json")
+    return await _fetch_period(start_iso, end_iso, out_path, str(year) + "년 fetch")
+
+
+async def fetch_month(yyyy_mm):
+    y, m = map(int, yyyy_mm.split("-"))
+    last_day = calendar.monthrange(y, m)[1]
+    today = date.today()
+    if y == today.year and m == today.month:
+        last_day = today.day
+    start_iso = "%04d-%02d-01" % (y, m)
+    end_iso = "%04d-%02d-%02d" % (y, m, last_day)
+    out_path = Path("data/raw_okpos_monthly") / (yyyy_mm + ".json")
+    return await _fetch_period(start_iso, end_iso, out_path, yyyy_mm + " 단일 월 fetch (진단)")
 
 
 async def main():
     if len(sys.argv) < 2:
-        print('Usage:
-  python product_okpos_backfill.py YYYY        # 연도
-  python product_okpos_backfill.py YYYY-MM     # 단일 월 (진단용)')
+        print("Usage:")
+        print("  python product_okpos_backfill.py YYYY        # 연도 전체")
+        print("  python product_okpos_backfill.py YYYY-MM     # 단일 월 (진단)")
         sys.exit(1)
     for arg in sys.argv[1:]:
         try:
-            if '-' in arg and len(arg) == 7:
+            if "-" in arg and len(arg) == 7:
                 await fetch_month(arg)
             else:
                 await fetch_year(int(arg))
         except Exception as e:
-            print(f'[{arg}] 실패: {e}')
+            print("[" + arg + "] 실패: " + str(e))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
