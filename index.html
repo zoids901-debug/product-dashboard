@@ -2985,6 +2985,65 @@ window.downloadExcel = downloadExcel;
 loadManifest();
 
 </script>
+<script>
+
+// ── postMessage 동기화 (부모 셸과 통신) ──
+function _prodApplySync(p) {
+  try {
+    if (!p) return;
+    // 매장 상태 (selStores)
+    if (Array.isArray(p.stores) && typeof selStores !== 'undefined') {
+      selStores.clear();
+      // 부모가 전체 선택을 보낼 때는 비워두는 게 기존 룰
+      const allCnt = (typeof STORES !== 'undefined') ? STORES.filter(s=>s!=='전체').length : 6;
+      if (p.stores.length !== allCnt) p.stores.forEach(s => selStores.add(s));
+      const lbl = document.getElementById('store-label');
+      if (lbl) lbl.textContent = selStores.size===0 ? '' : '● ' + [...selStores].join(' + ') + ' 보는 중';
+    }
+    // 날짜 범위 (loadDateRange가 일/월 자동 분기)
+    if (p.period && p.period.start && p.period.end) {
+      if (typeof loadDateRange === 'function') {
+        loadDateRange(p.period.start, p.period.end);
+      } else if (typeof onRangeChange === 'function') {
+        const mf = document.getElementById('month-from');
+        const mt = document.getElementById('month-to');
+        if (mf && mt) {
+          const fromYM = p.period.start.slice(0,7);
+          const toYM   = p.period.end.slice(0,7);
+          const yymmFrom = fromYM.slice(2,4) + fromYM.slice(5,7);
+          const yymmTo   = toYM.slice(2,4) + toYM.slice(5,7);
+          const find = (el, cands) => {
+            for (const c of cands) for (const o of el.options) if (o.value === c) return c;
+            const sorted = [...el.options].map(o=>o.value).filter(v=>v).sort();
+            let best = sorted[0];
+            for (const v of sorted) if (v <= cands[cands.length-1]) best = v;
+            return best;
+          };
+          mf.value = find(mf, [fromYM+'.json', yymmFrom+'.json', fromYM, yymmFrom]);
+          mt.value = find(mt, [toYM+'.json',   yymmTo+'.json',   toYM,   yymmTo]);
+          onRangeChange();
+        }
+      } else if (typeof update === 'function') {
+        update();
+      }
+    }
+  } catch (e) { console.warn('[product applySync]', e); }
+}
+window.addEventListener('message', (e) => {
+  const m = e.data;
+  if (!m || m.type !== 'inkc:sync') return;
+  _prodApplySync(m.payload);
+  try { window.parent.postMessage({ type: 'inkc:synced', tab: 'product' }, '*'); } catch (_) {}
+});
+if (window.parent !== window) {
+  // loadDateRange/onRangeChange 등 핵심 함수 준비된 다음에 ready 보내기
+  const sendReady = () => {
+    try { window.parent.postMessage({ type: 'inkc:ready', tab: 'product' }, '*'); } catch (_) {}
+  };
+  if (typeof loadDateRange === 'function' || typeof onRangeChange === 'function') sendReady();
+  else setTimeout(sendReady, 300);
+}
+</script>
 
 </body>
 
