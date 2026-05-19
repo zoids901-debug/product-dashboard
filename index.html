@@ -404,8 +404,6 @@ tr:hover td{background:#f8f9fb}
 
       <div id="mx-sort-btns" style="display:flex;gap:4px"></div>
 
-      <div class="fbtn" id="mx-trail-btn" onclick="toggleMxTrail()" style="padding:4px 12px;font-size:11px" title="각 메뉴의 직전 기간 위치를 점선으로 표시">전월 대비 이동</div>
-
       <div class="fbtn active" id="mx-excl-btn" onclick="toggleMxExclude()" style="padding:4px 12px;font-size:11px">상위 이상치 제외</div>
 
     </div>
@@ -438,7 +436,7 @@ tr:hover td{background:#f8f9fb}
       <button class="rs-reset" onclick="resetMxRange('x')">리셋</button>
     </div>
     <div class="mx-range">
-      <span class="rs-label">건당(Y)</span>
+      <span class="rs-label">금액(Y)</span>
       <div class="rs-wrap">
         <div class="rs-track"><div class="rs-fill" id="mx-y-fill"></div></div>
         <input type="range" id="mx-y-min" min="0" max="100" value="0">
@@ -606,9 +604,6 @@ let mxExcludeBasic = true;       // 마스터 이상치 제외 토글
 
 let mxExcludeOverrides = new Set(); // 강제 포함 항목 (이상치여도 표시)
 let mxRange = { xMin:null, xMax:null, yMin:null, yMax:null };
-let mxShowTrail = false;  // 전월 대비 이동 점선 표시
-let PREV_RAW = [];        // 직전 기간 데이터 (자동 fetch)
-let _mxRenderData = null; // {list, prevByItem} — plugin이 사용
 
 let mxTableSort = 'quad';        // 'quad' | 'qty' | 'net'
 
@@ -2007,76 +2002,6 @@ const BASE_MENU_PATTERNS = [
   '바닐라빈 라떼','바닐라빈라떼','바닐라빈 라때','바닐라빈라때',
 ];
 const BASE_MENU_SHARE_THRESHOLD = 2.5; // 매출/수량 비중 중 큰 값 기준
-function toggleMxTrail() {
-  mxShowTrail = !mxShowTrail;
-  const btn = document.getElementById('mx-trail-btn');
-  if (btn) btn.className = 'fbtn' + (mxShowTrail?' active':'');
-  if (chartMatrix) chartMatrix.update();
-  // 전월 데이터가 비어있고 ON 시 로딩 시도
-  if (mxShowTrail && PREV_RAW.length === 0 && LOAD_MODE === 'monthly') {
-    loadPrevPeriod().then(() => updateMatrix());
-  }
-}
-
-async function loadPrevPeriod() {
-  if (LOAD_MODE !== 'monthly' || !LOADED_MONTHS.length) { PREV_RAW = []; return; }
-  const firstFile = LOADED_MONTHS[0].file;
-  const firstIdx = AVAILABLE_MONTHS.findIndex(m => m.file === firstFile);
-  const count = LOADED_MONTHS.length;
-  if (firstIdx < count) { PREV_RAW = []; return; }
-  const prevMonths = AVAILABLE_MONTHS.slice(firstIdx - count, firstIdx);
-  try {
-    const results = await Promise.all(prevMonths.map(m =>
-      fetch(DATA_BASE_URL + m.file).then(r => r.ok ? r.json() : null).catch(() => null)
-    ));
-    const normStore = s => s.endsWith('점') ? s.slice(0,-1) : s;
-    PREV_RAW = results.filter(d=>d).flatMap((d, idx) => (d.items || []).map(r => ({...r, month: prevMonths[idx].file})))
-      .map(r => {
-        const ov = CAT_OVERRIDE[r.item];
-        return ov ? {...r, store: normStore(r.store), ...ov} : {...r, store: normStore(r.store)};
-      });
-  } catch(e) {
-    console.warn('전월 데이터 로드 실패:', e);
-    PREV_RAW = [];
-  }
-}
-
-const mxTrailPlugin = {
-  id: 'mxTrail',
-  afterDatasetsDraw(chart) {
-    if (!mxShowTrail || !_mxRenderData) return;
-    const {list, prevByItem} = _mxRenderData;
-    if (!prevByItem || Object.keys(prevByItem).length === 0) return;
-    const ctx = chart.ctx;
-    const xScale = chart.scales.x;
-    const yScale = chart.scales.y;
-    ctx.save();
-    list.forEach(item => {
-      const prev = prevByItem[item.item];
-      if (!prev) return;
-      const px = xScale.getPixelForValue(prev.qty);
-      const py = yScale.getPixelForValue(prev.avg);
-      const cx = xScale.getPixelForValue(item.qty);
-      const cy = yScale.getPixelForValue(item.avg);
-      // 점선
-      ctx.strokeStyle = 'rgba(100,116,139,0.5)';
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([3,3]);
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(cx, cy);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // 시작점 (옛 위치 ghost)
-      ctx.beginPath();
-      ctx.arc(px, py, 2.5, 0, 2*Math.PI);
-      ctx.fillStyle = 'rgba(148,163,184,0.55)';
-      ctx.fill();
-    });
-    ctx.restore();
-  }
-};
-
 function setupMxRange(axis, maxData) {
   const minEl = document.getElementById('mx-'+axis+'-min');
   const maxEl = document.getElementById('mx-'+axis+'-max');
@@ -2358,23 +2283,6 @@ function updateMatrix() {
 
   });
 
-  // 전월 대비 집계
-  const prevByItem = {};
-  if (mxShowTrail && PREV_RAW.length > 0) {
-    const pd = selStores.size===0 ? PREV_RAW : PREV_RAW.filter(r=>selStores.has(r.store));
-    const fpd = mxCatBig==='전체' ? pd : pd.filter(r=>matchBig(r.cat_big, mxCatBig));
-    const pitemsAll = {};
-    fpd.forEach(r=>{
-      if(!pitemsAll[r.item]) pitemsAll[r.item]={qty:0,net:0};
-      pitemsAll[r.item].qty+=r.qty;
-      pitemsAll[r.item].net+=r.net;
-    });
-    Object.entries(pitemsAll).forEach(([nm, v])=>{
-      if (v.qty>0 && v.net>0) prevByItem[nm] = {qty:v.qty, avg:Math.floor(v.net/v.qty)};
-    });
-  }
-  _mxRenderData = { list, prevByItem };
-
   if(chartMatrix) chartMatrix.destroy();
 
   chartMatrix = new Chart(document.getElementById('chart-matrix'),{
@@ -2391,7 +2299,7 @@ function updateMatrix() {
 
         x:{title:{display:true,text:'판매수량',font:{size:11}},grid:{color:'#f0f2f5'}},
 
-        y:{title:{display:true,text:'건당 매출(원)',font:{size:11}},grid:{color:'#f0f2f5'},
+        y:{title:{display:true,text:'금액(원)',font:{size:11}},grid:{color:'#f0f2f5'},
 
           ticks:{callback:v=>v>=10000?Math.floor(v/10000)+'만':comma(v)}}
 
@@ -2421,9 +2329,7 @@ function updateMatrix() {
 
       }
 
-    },
-
-    plugins: [mxTrailPlugin]
+    }
 
   });
 
@@ -2701,9 +2607,6 @@ async function loadRange(fromFile, toFile) {
     LOAD_MODE     = 'monthly';
 
     DATA_LOADED = true;
-
-    // 직전 기간 자동 로딩 (전월 대비 trail용)
-    await loadPrevPeriod();
 
     // Label
 
