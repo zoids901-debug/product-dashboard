@@ -1,0 +1,34 @@
+name: 광주 매장 코드 분리 테스트
+
+on: { workflow_dispatch: }
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+        with: { token: "${{ secrets.GH_PAT }}" }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install
+        run: |
+          pip install requests playwright
+          python -m playwright install --with-deps chromium
+      - name: Run
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_REPO:  zoids901-debug/product-dashboard
+          OKPOS_ID: ${{ secrets.OKPOS_ID }}
+          OKPOS_PW: ${{ secrets.OKPOS_PW }}
+          TOSS_ID:  ${{ secrets.TOSS_ID }}
+          TOSS_PW:  ${{ secrets.TOSS_PW }}
+        run: |
+          python -u scripts/test_gj.py 2>&1 | tee /tmp/test.log
+          mkdir -p data/_debug
+          cp /tmp/test.log data/_debug/test_gj_$(date -u +%Y%m%d_%H%M).log
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/_debug/
+          git diff --cached --quiet || (git commit -m "test log" && git push origin HEAD:main || true)
