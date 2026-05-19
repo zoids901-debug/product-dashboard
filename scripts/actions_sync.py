@@ -387,10 +387,18 @@ async def main():
         # 재수집 시 같은 location에 누적되지 않도록, 이번 run에서 처음 만나는 매장은 bucket reset
         # (다산 1층 + 지하 같은 동일 loc 다중 SHOP_CD는 reset 이후 누적되어야 하므로 set으로 추적)
         fetched_locs = set()
+        debug_log = []
         for si in STORES.values():
             loc = si['location']
             try:
                 rows = okpos_fetch_day(okpos_session, csrf, savename, date_str, si['code'], si['name'])
+                sample = (rows[0] if rows else {})
+                debug_log.append({
+                    'date': date_str, 'code': si['code'], 'loc': loc,
+                    'rows': len(rows),
+                    'sample_keys': list(sample.keys())[:10] if sample else [],
+                    'sample_prod': sample.get('PROD_NM', '') if sample else '',
+                })
                 print(f'  [{si["code"]}/{loc}] fetched {len(rows)} rows', flush=True)
                 if loc not in fetched_locs:
                     day_stores[loc] = []  # 첫 fetch에서 기존 데이터 클리어
@@ -425,6 +433,11 @@ async def main():
         out = {'date': date_str, 'stores': day_stores}
         gh_put(path, json.dumps(out, ensure_ascii=False, separators=(',',':')).encode('utf-8'),
                f'auto: OKPOS {date_str}', sha=sha)
+        # debug: 매장별 fetch 결과 저장
+        dbg_path = f'data/_debug/fetch_{date_str}.json'
+        dbg_sha = gh_exists(dbg_path)
+        gh_put(dbg_path, json.dumps(debug_log, ensure_ascii=False, indent=2).encode('utf-8'),
+               f'debug: fetch log {date_str}', sha=dbg_sha)
         affected_months.add((d.year, d.month))
         print(f'[OKPOS] {date_str} 업로드 ({sum(len(v) for v in day_stores.values())}건)', flush=True)
 
