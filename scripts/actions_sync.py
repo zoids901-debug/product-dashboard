@@ -391,6 +391,7 @@ async def main():
             loc = si['location']
             try:
                 rows = okpos_fetch_day(okpos_session, csrf, savename, date_str, si['code'], si['name'])
+                print(f'  [{si["code"]}/{loc}] fetched {len(rows)} rows', flush=True)
                 if loc not in fetched_locs:
                     day_stores[loc] = []  # 첫 fetch에서 기존 데이터 클리어
                     fetched_locs.add(loc)
