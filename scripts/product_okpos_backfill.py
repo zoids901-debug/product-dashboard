@@ -114,20 +114,51 @@ async def fetch_month(yyyy_mm):
     return await _fetch_period(start_iso, end_iso, out_path, yyyy_mm + " 단일 월 fetch (진단)")
 
 
+def expand_args(args):
+    """인자 확장 — 월 범위, 연도 범위, 단일."""
+    # 두 인자 모두 YYYY-MM → 월 범위
+    if len(args) == 2 and len(args[0]) == 7 and len(args[1]) == 7 and '-' in args[0] and '-' in args[1]:
+        y1, m1 = map(int, args[0].split('-'))
+        y2, m2 = map(int, args[1].split('-'))
+        out = []
+        y, m = y1, m1
+        while (y, m) <= (y2, m2):
+            out.append(("month", "%04d-%02d" % (y, m)))
+            m += 1
+            if m > 12: m = 1; y += 1
+        return out
+    # 두 인자 모두 YYYY → 연도 범위
+    if len(args) == 2 and args[0].isdigit() and args[1].isdigit():
+        y1, y2 = int(args[0]), int(args[1])
+        return [("year", y) for y in range(min(y1,y2), max(y1,y2)+1)]
+    # 그 외: 각 인자 개별 처리
+    out = []
+    for arg in args:
+        if "-" in arg and len(arg) == 7:
+            out.append(("month", arg))
+        elif arg.isdigit():
+            out.append(("year", int(arg)))
+    return out
+
+
 async def main():
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python product_okpos_backfill.py YYYY        # 연도 전체")
-        print("  python product_okpos_backfill.py YYYY-MM     # 단일 월 (진단)")
+        print("  python product_okpos_backfill.py YYYY              # 연도 전체")
+        print("  python product_okpos_backfill.py YYYY YYYY         # 연도 범위")
+        print("  python product_okpos_backfill.py YYYY-MM           # 단일 월")
+        print("  python product_okpos_backfill.py YYYY-MM YYYY-MM   # 월 범위")
         sys.exit(1)
-    for arg in sys.argv[1:]:
+    targets = expand_args(sys.argv[1:])
+    print("=== 처리 대상: " + str(len(targets)) + "개 ===")
+    for kind, val in targets:
         try:
-            if "-" in arg and len(arg) == 7:
-                await fetch_month(arg)
+            if kind == "month":
+                await fetch_month(val)
             else:
-                await fetch_year(int(arg))
+                await fetch_year(val)
         except Exception as e:
-            print("[" + arg + "] 실패: " + str(e))
+            print("[" + str(val) + "] 실패: " + str(e))
 
 
 if __name__ == "__main__":
