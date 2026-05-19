@@ -1,0 +1,59 @@
+name: 상품 OK포스 Backfill (검증용)
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_year:
+        description: '시작 연도 (YYYY)'
+        required: true
+        default: '2024'
+      to_year:
+        description: '끝 연도 (YYYY)'
+        required: true
+        default: '2024'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Backfill
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_REPO:  zoids901-debug/product-dashboard
+          OKPOS_ID: ${{ secrets.OKPOS_ID }}
+          OKPOS_PW: ${{ secrets.OKPOS_PW }}
+          TOSS_ID:  ${{ secrets.TOSS_ID }}
+          TOSS_PW:  ${{ secrets.TOSS_PW }}
+        run: |
+          set -e
+          for y in $(seq ${{ inputs.from_year }} ${{ inputs.to_year }}); do
+            python -u scripts/product_okpos_backfill.py "$y"
+          done
+
+      - name: Commit
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw_okpos_yearly/
+          if git diff --cached --quiet; then
+            echo "변경 없음"
+            exit 0
+          fi
+          git commit -m "backfill: 상품 OK포스 raw ${{ inputs.from_year }}~${{ inputs.to_year }}"
+          git push origin HEAD:main 2>&1 || (git pull --rebase origin main; git push origin HEAD:main)
