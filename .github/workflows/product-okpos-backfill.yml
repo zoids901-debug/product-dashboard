@@ -44,26 +44,18 @@ jobs:
         run: |
           set -e
           FROM="${{ inputs.from_year }}"
-          if [[ "$FROM" == *-* ]]; then
+          TO="${{ inputs.to_year }}"
+          if [[ "$FROM" == *-* && "$TO" == *-* ]]; then
+            ARGS=("$FROM" "$TO")
+          elif [[ "$FROM" == *-* ]]; then
             ARGS=("$FROM")
           else
             ARGS=()
-            for y in $(seq "$FROM" "${{ inputs.to_year }}"); do ARGS+=("$y"); done
+            for y in $(seq "$FROM" "$TO"); do ARGS+=("$y"); done
           fi
-          for a in "${ARGS[@]}"; do
-            python -u scripts/product_okpos_backfill.py "$a" 2>&1 | tee /tmp/bf.log
-            rc=${PIPESTATUS[0]}
-            if [ $rc -ne 0 ]; then
-              echo "=== 실패 ($rc) ==="
-              mkdir -p data/_debug
-              cp /tmp/bf.log "data/_debug/bf_$(date -u +%Y%m%d_%H%M).log"
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add data/_debug/
-              git commit -m "debug log" && git push origin HEAD:main || true
-              exit $rc
-            fi
-          done
+          python -u scripts/product_okpos_backfill.py "${ARGS[@]}" 2>&1 | tee /tmp/bf.log
+          rc=${PIPESTATUS[0]}
+
 
       - name: Commit
         run: |
