@@ -29,7 +29,9 @@ jobs:
           python-version: '3.12'
 
       - name: Install deps
-        run: pip install requests
+        run: |
+          pip install requests playwright
+          python -m playwright install --with-deps chromium
 
       - name: Backfill
         env:
@@ -42,7 +44,18 @@ jobs:
         run: |
           set -e
           for y in $(seq ${{ inputs.from_year }} ${{ inputs.to_year }}); do
-            python -u scripts/product_okpos_backfill.py "$y"
+            python -u scripts/product_okpos_backfill.py "$y" 2>&1 | tee /tmp/bf.log
+            rc=${PIPESTATUS[0]}
+            if [ $rc -ne 0 ]; then
+              echo "=== 실패 ($rc) ==="
+              mkdir -p data/_debug
+              cp /tmp/bf.log "data/_debug/bf_$(date -u +%Y%m%d_%H%M).log"
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add data/_debug/
+              git commit -m "debug log" && git push origin HEAD:main || true
+              exit $rc
+            fi
           done
 
       - name: Commit
