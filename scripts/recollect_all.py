@@ -57,16 +57,19 @@ async def main():
                 if not is_valid(nm) or net == 0:
                     continue
                 nm = normalize_name(nm)
+                code = (row.get('PROD_CD') or '').strip()
                 cb = (row.get('LCLS_NM') or '').strip()
                 cm = (row.get('MCLS_NM') or '').strip()
                 cs = (row.get('SCLS_NM') or '').strip()
                 if nm in bucket:
                     bucket[nm]['qty'] += qty
                     bucket[nm]['net'] += net
+                    if not bucket[nm].get('code') and code:
+                        bucket[nm]['code'] = code
                     if not bucket[nm].get('cat_big') and cb:
                         bucket[nm]['cat_big'], bucket[nm]['cat_mid'], bucket[nm]['cat_small'] = cb, cm, cs
                 else:
-                    bucket[nm] = {'item': nm, 'qty': qty, 'net': net,
+                    bucket[nm] = {'item': nm, 'code': code, 'qty': qty, 'net': net,
                                   'cat_big': cb, 'cat_mid': cm, 'cat_small': cs}
 
         # daily 파일의 OK포스 5개 loc 항목 완전 교체 (운정은 보존)
