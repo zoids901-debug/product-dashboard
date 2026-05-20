@@ -81,12 +81,14 @@ async def main():
             continue
         stores = existing.setdefault('stores', {})
         old_net = sum(int(x.get('net', 0)) for loc in OKPOS_LOCS for x in stores.get(loc, []))
+        # 기존 daily에 상품코드가 하나라도 있는지 — 없으면 매출 동일해도 갱신(코드 채우기)
+        old_has_code = any(x.get('code') for loc in OKPOS_LOCS for x in stores.get(loc, []))
         new_net = 0
         for loc in OKPOS_LOCS:
             items = list(loc_bucket.get(loc, {}).values())
             stores[loc] = items
             new_net += sum(int(x.get('net', 0)) for x in items)
-        if old_net == new_net:
+        if old_net == new_net and old_has_code:
             continue
         gh_put(path, json.dumps(existing, ensure_ascii=False, separators=(',', ':')).encode('utf-8'),
                f'recollect: 5매장 {date_str} (old {old_net:,} -> new {new_net:,})', sha=sha)
