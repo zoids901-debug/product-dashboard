@@ -215,9 +215,26 @@ def is_valid(name):
     return True
 
 
-# 매장간 상품명 표기 차이 통일 (잘못된 표기 → 정식 표기)
+# 매장간 상품명 표기 차이 통일 (잘못된 표기 → OK포스 마스터 정식 표기)
 NAME_ALIASES = {
     '애플 잼 스콘': '애플잼 스콘',
+    # 운정(TOSS) 표기 → OK포스 인크 코드 마스터 표기 통일
+    '카페라떼': 'I 카페 라떼',
+    '카페모카': 'I 카페 모카',
+    '피스타치오 퀸아망': '피스타치오 퀸 아망',
+    '얼그레이 퀸아망': '얼 그레이 퀸 아망',
+    '무화과크림치즈휘낭시에': '무화과 크림 치즈 휘낭시에',
+    '얼그레이휘낭시에': '얼 그레이 휘낭시에',
+    '햄치즈 소금빵': '햄 치즈 소금빵',
+    '레몬 버터바': '레몬 버터 바',
+    '피넛 버터바': '피넛 버터 바',
+    '오렌지 쇼핑백': '오렌지쇼핑백',
+    '다크 오리진 블렌드 (200g)': '다크 오리진블렌드 200g',
+    '인크 오리진 블렌드 (200g)': '인크 오리진블렌드 200g',
+    '벨벳 브리즈 (200g)': '벨벳브리즈 200g',
+    '콜롬비아 디카페인 (200g)': '콜롬비아 디카페인(200g)',
+    '인크 오리진 블렌드1KG': '인크 오리진블렌드 1Kg',
+    '다크 오리진 블렌드 1KG': '다크 오리진블렌드 1Kg',
 }
 
 def normalize_name(name):
@@ -465,7 +482,7 @@ async def main():
                 path = f'data/daily/{fname}'
                 sha, existing = gh_get(path)
                 out = existing or {'date': d.strftime('%Y-%m-%d'), 'stores': {}}
-                out['stores']['운정'] = [{'item':nm,'qty':v['qty'],'net':v['net']} for nm,v in items.items()]
+                out['stores']['운정'] = [{'item':normalize_name(nm),'qty':v['qty'],'net':v['net']} for nm,v in items.items()]
                 gh_put(path, json.dumps(out, ensure_ascii=False, separators=(',',':')).encode('utf-8'),
                        f'auto: TOSS 운정 {d.isoformat()}', sha=sha)
                 print(f'[TOSS] {d.isoformat()}: 운정 {len(items)}개', flush=True)
