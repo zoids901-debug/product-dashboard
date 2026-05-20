@@ -25,7 +25,7 @@ OKPOS_PW = os.environ['OKPOS_PW']
 TOSS_ID  = os.environ['TOSS_ID']
 TOSS_PW  = os.environ['TOSS_PW']
 
-LOOKBACK_DAYS = 14
+LOOKBACK_DAYS = 7
 
 # OK POS 매장
 STORES = {
