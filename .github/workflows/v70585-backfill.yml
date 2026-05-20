@@ -1,0 +1,37 @@
+name: V70585 Backfill (광주 투고존 일자별 복원)
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: '시작일 (YYYY-MM-DD)'
+        required: false
+        default: '2024-01-01'
+      end:
+        description: '종료일 (YYYY-MM-DD, 비우면 오늘)'
+        required: false
+        default: ''
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      OKPOS_ID: ${{ secrets.OKPOS_ID }}
+      OKPOS_PW: ${{ secrets.OKPOS_PW }}
+      TOSS_ID:  ${{ secrets.TOSS_ID }}
+      TOSS_PW:  ${{ secrets.TOSS_PW }}
+      BF_START: ${{ inputs.start }}
+      BF_END:   ${{ inputs.end }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install deps
+        run: |
+          pip install requests playwright
+          python -m playwright install --with-deps chromium
+      - name: Backfill V70585
+        working-directory: scripts
+        run: python backfill_v70585.py
