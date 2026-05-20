@@ -17,7 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      GH_REPO: zoids901-debug/product-dashboard
       OKPOS_ID: ${{ secrets.OKPOS_ID }}
       OKPOS_PW: ${{ secrets.OKPOS_PW }}
       TOSS_ID:  ${{ secrets.TOSS_ID }}
