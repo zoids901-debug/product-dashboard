@@ -1,0 +1,38 @@
+name: Recollect All (5매장 일자별 재수집)
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: '시작일'
+        required: false
+        default: '2025-01-01'
+      end:
+        description: '종료일'
+        required: false
+        default: ''
+
+jobs:
+  recollect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      GH_REPO: zoids901-debug/product-dashboard
+      OKPOS_ID: ${{ secrets.OKPOS_ID }}
+      OKPOS_PW: ${{ secrets.OKPOS_PW }}
+      TOSS_ID: ${{ secrets.TOSS_ID }}
+      TOSS_PW: ${{ secrets.TOSS_PW }}
+      RC_START: ${{ inputs.start }}
+      RC_END: ${{ inputs.end }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install deps
+        run: |
+          pip install requests playwright
+          python -m playwright install --with-deps chromium
+      - name: Recollect All
+        working-directory: scripts
+        run: python recollect_all.py
