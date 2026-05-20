@@ -359,12 +359,16 @@ async def main():
         fname = d.strftime('%y%m%d') + '.json'
         needs_fetch = (d == today) or (not gh_exists(f'data/daily/{fname}'))
         if not needs_fetch:
-            # 매장 누락 체크 — 5개 OKPOS 매장 모두 있어야
+            # 매장 누락 체크 — 5개 OKPOS 매장 모두 있고, 각 매장에 데이터 1건 이상 있어야
+            # (빈 list[]도 "있음"으로 잘못 통과되던 버그 fix — 수원 1일 딜레이 시 발생)
             _, existing = gh_get(f'data/daily/{fname}')
-            existing_locs = set((existing or {}).get('stores', {}).keys())
+            existing_stores = (existing or {}).get('stores', {})
+            existing_locs = {loc for loc, items in existing_stores.items() if items}
             if not OKPOS_LOCATIONS.issubset(existing_locs):
                 missing = OKPOS_LOCATIONS - existing_locs
-                print(f'[OKPOS] {d.isoformat()} 누락 매장 발견: {missing} → 재수집', flush=True)
+                # 단, 오늘 sync 시점에서 어제 매출이 아직 안 들어왔을 수 있는 매장(수원)은
+                # LOOKBACK 기간 내 재시도 자체에는 부담 없음 — 재수집 후에도 0이면 그냥 0
+                print(f'[OKPOS] {d.isoformat()} 매출 0 또는 키 누락 매장: {missing} → 재수집', flush=True)
                 needs_fetch = True
             else:
                 # 카테고리 누락 체크 — 어느 매장이든 첫 item에 cat_big이 없으면 재수집
