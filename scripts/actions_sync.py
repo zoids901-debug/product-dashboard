@@ -319,9 +319,12 @@ def rebuild_month(year, month):
                 nm = (it.get('item') or '').strip()
                 if not nm: continue
                 k = (store, nm)
-                if k not in agg: agg[k] = {'qty':0,'net':0,'daily_cat':None}
+                if k not in agg: agg[k] = {'qty':0,'net':0,'daily_cat':None,'code':''}
                 agg[k]['qty'] += it.get('qty',0)
                 agg[k]['net'] += it.get('net',0)
+                # 상품코드 — 첫 번째로 만난 값 유지
+                if it.get('code') and not agg[k]['code']:
+                    agg[k]['code'] = it['code']
                 # daily에서 카테고리 학습 (OKPOS 응답 기반, 첫 번째 값 유지)
                 if it.get('cat_big') and not agg[k]['daily_cat']:
                     agg[k]['daily_cat'] = {kk: it.get(kk,'') or '' for kk in ('cat_big','cat_mid','cat_small')}
@@ -329,7 +332,7 @@ def rebuild_month(year, month):
     for (store, nm), v in agg.items():
         # 우선순위: 기존 월별 cat_map (수동 보정 보존) > daily 학습 cat (OKPOS 자동) > 빈값
         cat = _resolve_cat(nm, cat_map, v.get('daily_cat'), store=store)
-        items_out.append({'store':store,'item':nm,'qty':v['qty'],'net':v['net'],**cat})
+        items_out.append({'store':store,'item':nm,'code':v.get('code',''),'qty':v['qty'],'net':v['net'],**cat})
     out = {'items': items_out}
     now = date.today()
     if year == now.year and month == now.month:
@@ -417,19 +420,22 @@ async def main():
                     net = int(row.get('TOT_SALE_AMT') or 0)
                     if not is_valid(nm) or net == 0: continue
                     nm = normalize_name(nm)
+                    code = (row.get('PROD_CD') or '').strip()
                     cat_big   = (row.get('LCLS_NM') or '').strip()
                     cat_mid   = (row.get('MCLS_NM') or '').strip()
                     cat_small = (row.get('SCLS_NM') or '').strip()
                     if nm in bucket_dict:
                         bucket_dict[nm]['qty'] += qty
                         bucket_dict[nm]['net'] += net
+                        if not bucket_dict[nm].get('code') and code:
+                            bucket_dict[nm]['code'] = code
                         # 카테고리는 첫 번째로 만난 값 유지 (덮어쓰지 않음)
                         if not bucket_dict[nm].get('cat_big') and cat_big:
                             bucket_dict[nm]['cat_big']   = cat_big
                             bucket_dict[nm]['cat_mid']   = cat_mid
                             bucket_dict[nm]['cat_small'] = cat_small
                     else:
-                        bucket_dict[nm] = {'item': nm, 'qty': qty, 'net': net,
+                        bucket_dict[nm] = {'item': nm, 'code': code, 'qty': qty, 'net': net,
                                            'cat_big': cat_big, 'cat_mid': cat_mid, 'cat_small': cat_small}
                 day_stores[loc] = list(bucket_dict.values())
             except Exception as e:
