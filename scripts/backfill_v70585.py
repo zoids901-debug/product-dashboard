@@ -18,8 +18,8 @@ from actions_sync import okpos_login, okpos_fetch_day, gh_get, gh_put, gh_exists
 
 
 V70585 = {'code': 'V70585', 'name': '인크커피광주(To go zone)'}
-START = os.environ.get('BF_START', '2024-01-01')
-END   = os.environ.get('BF_END',   datetime.now().strftime('%Y-%m-%d'))
+START = os.environ.get('BF_START') or '2024-01-01'
+END   = os.environ.get('BF_END')   or datetime.now().strftime('%Y-%m-%d')
 
 
 def daterange(s, e):
