@@ -207,10 +207,10 @@ def okpos_fetch_day(session, csrf, savename, date_str, code, name):
 
 def is_valid(name):
     """진짜 노이즈만 제외 — 특수문자(*,-,=) 포함된 진짜 상품(*레몬파운드, 인크*타바론 등)은 통과.
-    노이즈 = 특수문자만으로 구성 또는 ** -- == 연속으로 시작."""
-    if not name or len(name) < 2: return False
+    1글자 상품명(X 등 OK포스 정식 등록 항목)도 통과 — 노이즈는 특수문자/공백만인 경우만."""
+    if not name: return False
     stripped = name.replace('*','').replace('-','').replace('=','').replace(' ','').replace('★','').replace('☆','')
-    if len(stripped) < 2: return False  # 특수문자만 → 노이즈
+    if not stripped: return False  # 특수문자/공백만 → 노이즈
     if name.startswith('**') or name.startswith('--') or name.startswith('=='): return False
     return True
 
