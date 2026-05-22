@@ -2,7 +2,9 @@ name: Daily Data Sync
 
 on:
   schedule:
-    # 매일 KST 23:00 = UTC 14:00
+    # 마감 시간대 KST 17:00~22:30 30분마다 (UTC 08:00~13:30)
+    - cron: '0,30 8-13 * * *'
+    # KST 23:00 마감 집계 (UTC 14:00)
     - cron: '0 14 * * *'
   workflow_dispatch:  # 수동 실행 가능
 
