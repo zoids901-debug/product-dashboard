@@ -3,7 +3,7 @@
     "date": "2026-05-24",
     "code": "V09651",
     "loc": "가산",
-    "rows": 140,
+    "rows": 143,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -22,7 +22,7 @@
     "date": "2026-05-24",
     "code": "V67293",
     "loc": "다산",
-    "rows": 197,
+    "rows": 201,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -41,7 +41,7 @@
     "date": "2026-05-24",
     "code": "V67295",
     "loc": "다산",
-    "rows": 40,
+    "rows": 43,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
