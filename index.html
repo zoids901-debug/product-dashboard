@@ -534,6 +534,32 @@ const CAT_OVERRIDE = {
 
 };
 
+// 키워드 기반 자동 분류 — OK포스 raw cat이 비표준('매장메뉴' 등)이거나 빈값(운정 토스)일 때 fallback
+const _CAT_KW_RULES = [
+  { re: /(아메리카노|라떼|모카|에스프레소|콜드브루|드립커피|블렌드 드립|샷추가|시럽 ?추가|마끼아또|카푸치노|커피$|커피[ \(])/, big: '음료', mid: '음료', small: '커피' },
+  { re: /(레모네이드|에이드|스무디|쉐이크|아이스티|밀크티|얼그레이|차이|녹차|홍차|티$|티[ \(]|주스|쥬스|콤부차|요거트)/, big: '음료', mid: '음료', small: '음료' },
+  { re: /(빵|식빵|크루아상|쿠키|머핀|스콘|타르트|퀸아망|마들렌|휘낭시에|롤|페이스트리|데니쉬|번|컵케이크|치즈케이크|파운드|마카롱|크림빵|소금빵|단팥빵|메론빵|베이글|치아바타|브리오슈|에끌레르|구겔호프|크로플)/, big: '베이커리', mid: '베이커리', small: '베이커리' },
+  { re: /(샌드위치|샐러드|토스트|핫도그|와플|브런치|파니니|랩)/, big: '푸드', mid: '푸드', small: '푸드' },
+  { re: /(원두|드립백|커피파우더|텀블러|머그|쇼핑백|에코백|스트랩|캐리어|굿즈|선물세트|기프트|쇼퍼|보틀|키링|배지)/, big: 'MD/기타', mid: 'MD', small: 'MD' },
+];
+function inferCategory(itemName) {
+  if (!itemName) return null;
+  for (const r of _CAT_KW_RULES) {
+    if (r.re.test(itemName)) return { cat_big: r.big, cat_mid: r.mid, cat_small: r.small };
+  }
+  return null;
+}
+// 정규화: 수동 오버라이드 > raw가 표준이면 그대로 > 키워드 추론 > raw 그대로(빈값/매장메뉴 등은 MD/기타로 떨어짐)
+function normalizeCategory(itemName, rawCat) {
+  if (CAT_OVERRIDE[itemName]) return CAT_OVERRIDE[itemName];
+  const big = rawCat && rawCat.cat_big;
+  const STD = ['음료','베이커리','푸드','MD/기타'];
+  if (STD.includes(big)) return rawCat;
+  const inf = inferCategory(itemName);
+  if (inf) return inf;
+  return rawCat || { cat_big: '', cat_mid: '', cat_small: '' };
+}
+
 // State
 
 // ============================================================
@@ -2604,8 +2630,8 @@ async function loadRange(fromFile, toFile) {
     // 각 row에 month 정보 부착 (워스트 추세 분석용)
     const allItems = results.flatMap((d, idx) => (d.items || []).map(r => ({...r, month: months[idx].file})))
       .map(r => {
-        const ov = CAT_OVERRIDE[r.item];
-        return ov ? {...r, store: normStore(r.store), ...ov} : {...r, store: normStore(r.store)};
+        const norm = normalizeCategory(r.item, {cat_big: r.cat_big, cat_mid: r.cat_mid, cat_small: r.cat_small});
+        return {...r, store: normStore(r.store), ...norm};
       });
 
     const STORE_ORDER_STD = ['하남','다산','가산','수원','광주','운정'];
@@ -2751,17 +2777,18 @@ async function loadDailyRange(startDate, endDate) {
         for (const it of items) {
           const name = (it.item || '').trim();
           if (!name) continue;
-          const ov = CAT_OVERRIDE[name];
           const cm = catMap[name] || {};
+          // normalize: 수동 OVERRIDE > raw가 표준이면 그대로 > 키워드 추론 > catMap 학습값 > '기타'
+          const norm = normalizeCategory(name, {cat_big: it.cat_big || cm.cat_big, cat_mid: it.cat_mid || cm.cat_mid, cat_small: it.cat_small || cm.cat_small});
           allItems.push({
             store:     ns,
             item:      name,
             qty:       it.qty || 0,
             net:       it.net || 0,
             date:      res.date,
-            cat_big:   ov ? ov.cat_big   : (cm.cat_big   || '기타'),
-            cat_mid:   ov ? ov.cat_mid   : (cm.cat_mid   || ''),
-            cat_small: ov ? ov.cat_small : (cm.cat_small || ''),
+            cat_big:   norm.cat_big || '기타',
+            cat_mid:   norm.cat_mid || '',
+            cat_small: norm.cat_small || '',
           });
         }
       }
@@ -2939,13 +2966,9 @@ async function downloadExcel() {
     Object.entries(storeMap).forEach(([store, arr]) => {
       if (wantStores && !wantStores.has(store)) return;
       arr.forEach(r => {
-        const ov = (typeof CAT_OVERRIDE !== 'undefined' && CAT_OVERRIDE) ? CAT_OVERRIDE[r.item] : null;
-        // 우선순위: 오버라이드 > daily 자체 카테고리 > itemCat (RAW 학습) > 빈값
-        let cat;
-        if (ov) cat = {cat_big: ov.cat_big||'', cat_mid: ov.cat_mid||'', cat_small: ov.cat_small||''};
-        else if (r.cat_big || r.cat_mid || r.cat_small) cat = {cat_big: r.cat_big||'', cat_mid: r.cat_mid||'', cat_small: r.cat_small||''};
-        else if (itemCat[r.item]) cat = itemCat[r.item];
-        else cat = {cat_big:'', cat_mid:'', cat_small:''};
+        // 우선순위: normalize(수동 OVERRIDE > raw 표준 > 키워드 추론) > itemCat(RAW 학습) > 빈값
+        const rawCat = (r.cat_big || r.cat_mid || r.cat_small) ? {cat_big: r.cat_big||'', cat_mid: r.cat_mid||'', cat_small: r.cat_small||''} : (itemCat[r.item] || {});
+        const cat = normalizeCategory(r.item, rawCat);
         if (!agg[store]) agg[store] = [];
         agg[store].push({date, item: r.item, qty: r.qty||0, net: r.net||0, ...cat});
         if (!sumByStore[store]) sumByStore[store] = {qty:0, net:0, items:new Set(), days:new Set()};
