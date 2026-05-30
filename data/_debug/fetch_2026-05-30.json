@@ -22,7 +22,7 @@
     "date": "2026-05-30",
     "code": "V67293",
     "loc": "다산",
-    "rows": 190,
+    "rows": 192,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -35,7 +35,7 @@
       "TOT_SALE_AMT",
       "PROD_CD"
     ],
-    "sample_prod": "유기농 주스(애플디노)"
+    "sample_prod": "차가운우유"
   },
   {
     "date": "2026-05-30",
