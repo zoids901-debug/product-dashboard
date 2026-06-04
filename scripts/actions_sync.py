@@ -14,7 +14,7 @@ from datetime import date, timedelta, datetime
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 import requests
-from playwright.async_api import async_playwright
+import re
 
 GH_TOKEN = os.environ['GH_TOKEN']
 GH_REPO  = os.environ.get('GH_REPO', 'zoids901-debug/product-dashboard')
@@ -152,38 +152,40 @@ def gh_put(path, content_bytes, message, sha=None):
             raise
 
 
-# ── OK POS ────────────────────────────────────────
+# ── OK POS (순수 HTTP — 실시간 함수 prod-live.js 와 동일한 로그인 시퀀스) ──
+OK_BASE = 'https://okasp.okpos.co.kr'
+_CSRF_U = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
+def _find_csrf(html):
+    m = re.search(rf"name=['\"]({_CSRF_U})['\"]\s+value=['\"]({_CSRF_U})['\"]", html, re.I)
+    if m: return m.group(1), m.group(2)
+    m = re.search(rf"value=['\"]({_CSRF_U})['\"]\s+name=['\"]({_CSRF_U})['\"]", html, re.I)
+    if m: return m.group(2), m.group(1)
+    return None, None
+
 async def okpos_login():
-    print('[OKPOS] 로그인 중...', flush=True)
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=["--disable-popup-blocking"])
-        page = await browser.new_page()
-        page.on("popup", lambda popup: asyncio.ensure_future(popup.close()))
-        await page.goto(LOGIN_URL, wait_until="domcontentloaded")
-        await asyncio.sleep(2)
-        await page.evaluate("window.checkPopAccept = true;")
-        await page.fill("#user_id", OKPOS_ID)
-        await page.fill("#user_pwd", OKPOS_PW)
-        await page.evaluate("doSubmit();")
-        await asyncio.sleep(6)
-        mf = page.frame(name="MainFrm")
-        await mf.goto(PROD_PAGE, wait_until="networkidle")
-        await asyncio.sleep(3)
-        inner = next((f for f in page.frames if "prod011" in f.url), None)
-        csrf = await inner.evaluate("""
-            (function(){let el=document.querySelector("input[data-dchk='N']");
-            return el?{key:el.name,val:el.value}:null;})()
-        """)
-        savename = await inner.evaluate("""
-            (function(){let el=document.getElementById('S_SAVENAME');return el?el.value:'';})()
-        """)
-        cookies = await page.context.cookies()
-        await browser.close()
-    session = requests.Session()
-    for c in cookies:
-        session.cookies.set(c["name"], c["value"], domain=c.get("domain", "okasp.okpos.co.kr"))
-    print('[OKPOS] 완료', flush=True)
-    return session, csrf, savename
+    """브라우저 없이 순수 HTTP 로그인 (okasp.okpos.co.kr 직접).
+    반환: (requests.Session, {key,val} 세션 CSRF, savename='')."""
+    print('[OKPOS] 로그인 중(HTTP)...', flush=True)
+    s = requests.Session()
+    s.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko',
+                      'Accept-Language': 'ko-KR'})
+    ref = {'Referer': OK_BASE + '/login/login_form.jsp'}
+    ck, cv = _find_csrf(s.get(OK_BASE + '/login/login_form.jsp', timeout=30).text)
+    if not ck: raise RuntimeError('OKPOS 로그인 폼 CSRF 파싱 실패')
+    cred = [('AutoFg', 'W'), ('user_id', OKPOS_ID), ('user_pwd', OKPOS_PW)]
+    s.post(OK_BASE + '/login/login_check.jsp', data=[(ck, cv)] + cred, headers=ref, timeout=30)
+    s.post(OK_BASE + '/login/login_check_action.jsp', data=[(ck, cv), (ck, cv)] + cred, headers=ref, timeout=30)
+    sk = sv = None
+    for p in ['/login/top_frame.jsp', '/login/top_page.jsp', '/login/history.jsp', '/login/showitem.jsp']:
+        a, b = _find_csrf(s.get(OK_BASE + p, timeout=30).text)
+        if a and not sk: sk, sv = a, b
+    if not sk: raise RuntimeError('OKPOS 세션 CSRF 파싱 실패 (로그인 실패 가능)')
+    # 판매(prod011) 폼 워밍업
+    s.get(OK_BASE + '/sale/sale/prod010.jsp', timeout=30)
+    s.get(OK_BASE + '/sale/sale/prod011.jsp', headers={'Referer': OK_BASE + '/sale/sale/prod010.jsp'}, timeout=30)
+    print('[OKPOS] 완료(HTTP)', flush=True)
+    return s, {'key': sk, 'val': sv}, ''
 
 def okpos_fetch_day(session, csrf, savename, date_str, code, name):
     shop_info = json.dumps([{"SHOP_CD": code, "SHOP_NM": name}])
