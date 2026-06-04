@@ -2705,18 +2705,38 @@ async function loadRange(fromFile, toFile) {
 // 일 단위 모드 (loadDailyRange)
 // ============================================================
 
-async function loadDailyRange(startDate, endDate) {
+// KST 오늘 (실시간 함수가 내려주는 date 와 동일 기준)
+function _kstToday() {
+  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+// 오늘이 범위에 포함되면 1분 뒤 silent 재로드(=오늘 /api/prod-live 재호출). 매 로드마다 재무장.
+let _prodLiveTimer = null;
+function _scheduleProdLive(startDate, endDate) {
+  if (_prodLiveTimer) { clearTimeout(_prodLiveTimer); _prodLiveTimer = null; }
+  const t = _kstToday();
+  if (!(startDate <= t && t <= endDate)) return;
+  _prodLiveTimer = setTimeout(function () {
+    if (LOAD_MODE === 'daily' && LOADED_DATES && LOADED_DATES.indexOf(t) >= 0) {
+      loadDailyRange(startDate, endDate, true);
+    }
+  }, 60000);
+}
+
+async function loadDailyRange(startDate, endDate, silent) {
   if (!startDate || !endDate) return;
   if (startDate > endDate) { const t = startDate; startDate = endDate; endDate = t; }
 
-  const overlay = document.createElement('div');
-  overlay.className = 'loading-overlay';
-  overlay.id = 'loading-overlay';
-  overlay.textContent = '일별 데이터 로딩 중...';
-  document.body.appendChild(overlay);
+  let overlay = null;
+  if (!silent) {
+    overlay = document.createElement('div');
+    overlay.className = 'loading-overlay';
+    overlay.id = 'loading-overlay';
+    overlay.textContent = '일별 데이터 로딩 중...';
+    document.body.appendChild(overlay);
+  }
 
   const status = document.getElementById('load-status');
-  status.textContent = '로딩 중...';
+  if (!silent) status.textContent = '로딩 중...';
 
   try {
     // 날짜 리스트 생성 (YYYY-MM-DD)
@@ -2735,8 +2755,16 @@ async function loadDailyRange(startDate, endDate) {
 
     // 일별 파일 + 카테고리 월별 동시 fetch
     const DAILY_BASE = DATA_BASE_URL + 'daily/';
+    let _liveFetched = false;
     const [dailyResults, catMap] = await Promise.all([
       Promise.all(dates.map(async dt => {
+        // 오늘이면 실시간 함수(/api/prod-live) 우선 — 통합본에서만 존재, 옛 github.io는 404 → 정적 폴백
+        if (dt === _kstToday()) {
+          try {
+            const lr = await fetch('/api/prod-live', { cache: 'no-store' });
+            if (lr.ok) { const lj = await lr.json(); if (lj && lj.stores) { _liveFetched = true; return { date: dt, data: lj }; } }
+          } catch {}
+        }
         const fname = dt.slice(2,4) + dt.slice(5,7) + dt.slice(8,10) + '.json';
         try {
           const r = await fetch(DAILY_BASE + fname);
@@ -2811,11 +2839,13 @@ async function loadDailyRange(startDate, endDate) {
     document.title = '인크코피 상품기획 대시보드 — ' + label;
     const storeLbl = document.getElementById('store-label');
     if (storeLbl) storeLbl.textContent = selStores.size === 0 ? '' : '● ' + [...selStores].join(' + ') + ' 보는 중';
-    status.textContent = '✓ ' + label + ' (' + RAW.length.toLocaleString() + '건, ' + validDates + '/' + dates.length + '일)';
+    status.textContent = '✓ ' + label + ' (' + RAW.length.toLocaleString() + '건, ' + validDates + '/' + dates.length + '일)'
+        + (_liveFetched ? ' · 실시간' : '');
     status.style.color = '#00b894';
     document.getElementById('cat-note').style.display = 'none';
 
     update();
+    _scheduleProdLive(startDate, endDate);
   } catch (e) {
     status.textContent = '❌ 로드 실패: ' + e.message;
     status.style.color = '#e17055';
