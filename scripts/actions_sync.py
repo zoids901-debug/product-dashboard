@@ -364,6 +364,35 @@ def rebuild_month(year, month):
     print(f'[month] {yymm} 재생성 ({len(items_out)}건)', flush=True)
 
 
+# ── manifest 재생성 ────────────────────────────────
+def rebuild_manifest():
+    """data/ 의 월별 파일(YYMM.json)을 스캔해 manifest.json을 최신화.
+    새 달이 생기면 자동 등록 — 대시보드 조회기간 목록이 안 끊기도록.
+    내용이 그대로면 commit 생략."""
+    api = f'https://api.github.com/repos/{GH_REPO}/contents/data'
+    with urllib.request.urlopen(urllib.request.Request(api, headers=GH_HEADERS), timeout=20) as r:
+        entries = json.loads(r.read())
+    months = []
+    for e in entries:
+        m = re.fullmatch(r'(\d{2})(\d{2})\.json', e.get('name', ''))
+        if not m:
+            continue
+        yy, mm = int(m.group(1)), int(m.group(2))
+        if not (1 <= mm <= 12):
+            continue
+        year = 2000 + yy
+        months.append({'file': e['name'], 'label': f'{year}년 {mm}월', 'period': f'{year}-{mm:02d}'})
+    months.sort(key=lambda x: x['file'])
+    new_obj = {'months': months}
+    sha, existing = gh_get('data/manifest.json')
+    if existing == new_obj:
+        print(f'[manifest] 변경 없음 ({len(months)}개월)', flush=True)
+        return
+    content = json.dumps(new_obj, ensure_ascii=False).encode('utf-8')
+    gh_put('data/manifest.json', content, f'auto: manifest 재생성 ({len(months)}개월)', sha=sha)
+    print(f'[manifest] 재생성 ({len(months)}개월, 마지막 {months[-1]["file"] if months else "-"})', flush=True)
+
+
 # ── 메인 ──────────────────────────────────────────
 async def main():
     today = date.today()
@@ -500,6 +529,12 @@ async def main():
             rebuild_month(y, m)
         except Exception as e:
             print(f'[month] {y}-{m} 재생성 실패: {e}', flush=True)
+
+    # 4) manifest 재생성 (새 달 자동 등록)
+    try:
+        rebuild_manifest()
+    except Exception as e:
+        print(f'[manifest] 재생성 실패: {e}', flush=True)
 
     print(f'[done] {datetime.utcnow().isoformat()}Z UTC', flush=True)
 

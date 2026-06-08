@@ -2683,6 +2683,8 @@ async function loadRange(fromFile, toFile) {
 
     update();
 
+    refreshDrillIfOpen();  // 단일 상품 그래프 열려있으면 새 기간으로 자동 갱신
+
   } catch(e) {
 
     status.textContent = '\u274c \ub85c\ub4dc \uc2e4\ud328: ' + e.message;
@@ -2845,6 +2847,7 @@ async function loadDailyRange(startDate, endDate, silent) {
     document.getElementById('cat-note').style.display = 'none';
 
     update();
+    refreshDrillIfOpen();  // 단일 상품 그래프 열려있으면 새 기간으로 자동 갱신
     _scheduleProdLive(startDate, endDate);
   } catch (e) {
     status.textContent = '❌ 로드 실패: ' + e.message;
