@@ -1,0 +1,27 @@
+name: notify-unified
+
+# 이 repo가 push되면 통합본(inkc-dashboard)에 "재빌드해" 신호를 쏜다.
+# 신호를 받은 unified-deploy가 ink-korea.pages.dev를 즉시 다시 만든다.
+# 필요한 비밀값: UNIFIED_DISPATCH_PAT (~/Scripts/creds/set_dispatch_secret.py 로 1회 심음)
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/**'
+      - '**/*.md'
+
+concurrency:
+  group: notify-unified
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 통합본 재빌드 신호 전송
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: token ${{ secrets.UNIFIED_DISPATCH_PAT }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/zoids901-debug/inkc-dashboard/dispatches \
+            -d '{"event_type":"source-updated"}'
