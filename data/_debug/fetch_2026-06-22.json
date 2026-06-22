@@ -1,28 +1,9 @@
 [
   {
     "date": "2026-06-22",
-    "code": "V09651",
-    "loc": "가산",
-    "rows": 125,
-    "sample_keys": [
-      "SALE_QTY",
-      "TOT_DC_AMT",
-      "LCLS_CD",
-      "DCM_SALE_AMT",
-      "DC_AMT_SVC",
-      "DC_AMT_CPN",
-      "SHOP_CD",
-      "MCLS_NM",
-      "TOT_SALE_AMT",
-      "PROD_CD"
-    ],
-    "sample_prod": "--------------"
-  },
-  {
-    "date": "2026-06-22",
     "code": "V67293",
     "loc": "다산",
-    "rows": 152,
+    "rows": 153,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
