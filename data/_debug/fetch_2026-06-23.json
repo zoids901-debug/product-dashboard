@@ -60,9 +60,20 @@
     "date": "2026-06-23",
     "code": "V68581",
     "loc": "수원",
-    "rows": 0,
-    "sample_keys": [],
-    "sample_prod": ""
+    "rows": 70,
+    "sample_keys": [
+      "SALE_QTY",
+      "TOT_DC_AMT",
+      "LCLS_CD",
+      "DCM_SALE_AMT",
+      "DC_AMT_SVC",
+      "DC_AMT_CPN",
+      "SHOP_CD",
+      "MCLS_NM",
+      "TOT_SALE_AMT",
+      "PROD_CD"
+    ],
+    "sample_prod": "자카파 밀크"
   },
   {
     "date": "2026-06-23",
