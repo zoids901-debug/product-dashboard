@@ -564,12 +564,18 @@ function inferCategory(itemName) {
   }
   return null;
 }
-// 정규화: 수동 오버라이드 > raw가 표준이면 그대로 > 키워드 추론 > raw 그대로(빈값/매장메뉴 등은 MD/기타로 떨어짐)
+// 정규화: 수동 오버라이드 > raw 대분류 표준이면 그대로 > 비표준 대분류라도 중분류가 표준이면 승격 > 키워드 추론 > raw
 function normalizeCategory(itemName, rawCat) {
   if (CAT_OVERRIDE[itemName]) return CAT_OVERRIDE[itemName];
   const big = rawCat && rawCat.cat_big;
   const STD = ['음료','베이커리','푸드','MD/기타'];
   if (STD.includes(big)) return rawCat;
+  // 옛 '매장메뉴' 등 비표준 대분류라도 중분류가 표준(음료/베이커리/푸드)이면 그걸 대분류로 승격.
+  // (예: 매장메뉴>음료>시그니처 → 음료). MD는 중분류도 MD라 승격 안 됨 = MD/기타 유지(정상).
+  const mid = rawCat && rawCat.cat_mid;
+  if (['음료','베이커리','푸드'].includes(mid)) {
+    return { cat_big: mid, cat_mid: (rawCat.cat_small || mid), cat_small: (rawCat.cat_small || '') };
+  }
   const inf = inferCategory(itemName);
   if (inf) return inf;
   return rawCat || { cat_big: '', cat_mid: '', cat_small: '' };
