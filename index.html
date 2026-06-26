@@ -532,6 +532,18 @@ const CAT_OVERRIDE = {
 
   '그린패스트볼': { cat_big: '음료', cat_mid: '음료', cat_small: '그린패스트볼' },
 
+  // 자카파 밀크(시그니처 음료) — 옛 코드 000543은 OKPOS 대분류가 '매장메뉴'라 MD/기타로 떨어짐 → 강제 음료
+  '자카파 밀크': { cat_big: '음료', cat_mid: '공통', cat_small: '시그니처' },
+
+  '자카파_밀크': { cat_big: '음료', cat_mid: '공통', cat_small: '시그니처' },
+
+  '론 자카파 밀크': { cat_big: '음료', cat_mid: '공통', cat_small: '시그니처' },
+
+  '론자카파 밀크': { cat_big: '음료', cat_mid: '공통', cat_small: '시그니처' },
+
+  // 인크로쉐 — 베이커리(브레드)인데 POS 대분류 비표준이라 MD/기타로 떨어짐
+  '인크로쉐': { cat_big: '베이커리', cat_mid: '브레드', cat_small: '일반빵' },
+
 };
 
 // 키워드 기반 자동 분류 — OK포스 raw cat이 비표준('매장메뉴' 등)이거나 빈값(운정 토스)일 때 fallback
