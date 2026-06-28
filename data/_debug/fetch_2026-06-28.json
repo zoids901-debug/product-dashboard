@@ -3,7 +3,7 @@
     "date": "2026-06-28",
     "code": "V09651",
     "loc": "가산",
-    "rows": 116,
+    "rows": 120,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -22,7 +22,7 @@
     "date": "2026-06-28",
     "code": "V67293",
     "loc": "다산",
-    "rows": 175,
+    "rows": 179,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -41,7 +41,7 @@
     "date": "2026-06-28",
     "code": "V67295",
     "loc": "다산",
-    "rows": 42,
+    "rows": 45,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -68,7 +68,7 @@
     "date": "2026-06-28",
     "code": "V00555",
     "loc": "하남",
-    "rows": 66,
+    "rows": 67,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -87,7 +87,7 @@
     "date": "2026-06-28",
     "code": "V70577",
     "loc": "광주",
-    "rows": 114,
+    "rows": 117,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
