@@ -11,7 +11,7 @@
     "date": "2026-07-01",
     "code": "V70577",
     "loc": "광주",
-    "rows": 124,
+    "rows": 125,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -30,7 +30,7 @@
     "date": "2026-07-01",
     "code": "V70585",
     "loc": "광주",
-    "rows": 17,
+    "rows": 21,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
