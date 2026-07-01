@@ -11,7 +11,7 @@
     "date": "2026-07-01",
     "code": "V70577",
     "loc": "광주",
-    "rows": 129,
+    "rows": 130,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -24,7 +24,7 @@
       "TOT_SALE_AMT",
       "PROD_CD"
     ],
-    "sample_prod": "디카페인변경"
+    "sample_prod": "바닐라시럽"
   },
   {
     "date": "2026-07-01",
