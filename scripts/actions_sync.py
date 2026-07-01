@@ -403,7 +403,10 @@ async def main():
     okpos_session, csrf, savename = await okpos_login()
     include_today = True  # GH Actions는 정해진 시각에 돌므로 항상 당일 포함
     # OKPOS가 채워야 하는 매장 location (운정은 TOSS 별도)
-    OKPOS_LOCATIONS = {'가산','다산','수원','하남','광주'}
+    # 하남/가산/다산은 2026-07-01 큐브포스 전환 → 로컬 수집기(cubepos_product.py)가 채우므로
+    # 클라우드에선 조회/덮어쓰기 안 함(빈 OKPOS 결과로 지우면 안 됨).
+    CUBE_LOCATIONS = {'하남', '가산', '다산'}
+    OKPOS_LOCATIONS = {'수원', '광주'}
     target_dates = []
     for i in range(0 if include_today else 1, LOOKBACK_DAYS+1):
         d = today - timedelta(days=i)
@@ -445,6 +448,8 @@ async def main():
         debug_log = []
         for si in STORES.values():
             loc = si['location']
+            if loc in CUBE_LOCATIONS:
+                continue  # 큐브포스 전환 매장 — 로컬 수집기가 채움(클라우드는 손대지 않음)
             try:
                 rows = okpos_fetch_day(okpos_session, csrf, savename, date_str, si['code'], si['name'])
                 sample = (rows[0] if rows else {})
