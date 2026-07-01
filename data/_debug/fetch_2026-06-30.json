@@ -1,74 +1,9 @@
 [
   {
     "date": "2026-06-30",
-    "code": "V09651",
-    "loc": "가산",
-    "rows": 131,
-    "sample_keys": [
-      "SALE_QTY",
-      "TOT_DC_AMT",
-      "LCLS_CD",
-      "DCM_SALE_AMT",
-      "DC_AMT_SVC",
-      "DC_AMT_CPN",
-      "SHOP_CD",
-      "MCLS_NM",
-      "TOT_SALE_AMT",
-      "PROD_CD"
-    ],
-    "sample_prod": "--------------"
-  },
-  {
-    "date": "2026-06-30",
-    "code": "V67293",
-    "loc": "다산",
-    "rows": 162,
-    "sample_keys": [
-      "SALE_QTY",
-      "TOT_DC_AMT",
-      "LCLS_CD",
-      "DCM_SALE_AMT",
-      "DC_AMT_SVC",
-      "DC_AMT_CPN",
-      "SHOP_CD",
-      "MCLS_NM",
-      "TOT_SALE_AMT",
-      "PROD_CD"
-    ],
-    "sample_prod": "럼_크림커피"
-  },
-  {
-    "date": "2026-06-30",
-    "code": "V67295",
-    "loc": "다산",
-    "rows": 29,
-    "sample_keys": [
-      "SALE_QTY",
-      "TOT_DC_AMT",
-      "LCLS_CD",
-      "DCM_SALE_AMT",
-      "DC_AMT_SVC",
-      "DC_AMT_CPN",
-      "SHOP_CD",
-      "MCLS_NM",
-      "TOT_SALE_AMT",
-      "PROD_CD"
-    ],
-    "sample_prod": "연하게"
-  },
-  {
-    "date": "2026-06-30",
     "code": "V68581",
     "loc": "수원",
-    "rows": 0,
-    "sample_keys": [],
-    "sample_prod": ""
-  },
-  {
-    "date": "2026-06-30",
-    "code": "V00555",
-    "loc": "하남",
-    "rows": 50,
+    "rows": 74,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
@@ -81,7 +16,7 @@
       "TOT_SALE_AMT",
       "PROD_CD"
     ],
-    "sample_prod": "진동벨 1"
+    "sample_prod": "자카파 밀크"
   },
   {
     "date": "2026-06-30",
