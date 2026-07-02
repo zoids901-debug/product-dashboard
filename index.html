@@ -189,6 +189,35 @@ tr:hover td{background:#f8f9fb}
 .mx-range .rs-reset { background:#fff; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; font-size:10px; cursor:pointer; color:#475569; }
 .mx-range .rs-reset:hover { background:#f1f5f9; }
 
+/* ── 일자별 매장별 대분류 매출 표 (운영 대시보드 디자인 이식) ── */
+.scd-scroll{overflow:auto;max-height:60vh}
+.scd-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.scd-table thead tr:first-child th{background:#F8FAFC;font-weight:700;padding:6px 8px;border-bottom:2px solid #E2E8F0;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:50}
+.scd-table thead tr:last-child th{background:#F8FAFC;font-weight:500;color:#64748B;padding:3px 6px;border-bottom:1px solid #E2E8F0;text-align:center;font-size:11px;position:sticky;top:29px;z-index:49}
+.scd-th{white-space:nowrap}
+.scd-sub{white-space:nowrap}
+.scd-table tbody tr:hover{background:#F0F9FF}
+.scd-table tfoot td{background:#F1F5F9;font-weight:700;border-top:2px solid #CBD5E1}
+.scd-date{padding:5px 8px;color:#374151;font-weight:600;white-space:nowrap;text-align:center}
+.scd-dow{padding:5px 4px;color:#6B7280;text-align:center;font-size:11px}
+.scd-td{padding:5px 8px;text-align:right;color:#1E293B;border-bottom:1px solid #F1F5F9;white-space:nowrap}
+.scd-sub-td{font-weight:600;background:#F8FAFC}
+.scd-total{font-weight:700;color:#1E293B}
+.scd-storeend{border-right:2px solid #E2E8F0}
+.scd-wknd .scd-date,.scd-wknd .scd-dow{color:#EF4444}
+.scd-wknd td{background:#FFF5F5}
+.scd-ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 6px;padding:6px 10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;font-size:11px}
+.scd-ctrl-label{font-weight:700;color:#475569;margin-right:2px}
+.scd-heat-btn{padding:3px 10px;border:1px solid #CBD5E1;background:#fff;border-radius:4px;cursor:pointer;font-size:11px;color:#475569}
+.scd-heat-btn.on{background:#0EA5E9;color:#fff;border-color:#0EA5E9}
+.scd-mode-btn{padding:3px 10px;border:1px solid #CBD5E1;background:#fff;border-radius:4px;cursor:pointer;font-size:11px;color:#475569}
+.scd-mode-btn.active{background:#0EA5E9;color:#fff;border-color:#0EA5E9}
+.scd-store-chips{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+.scd-store-chip{padding:3px 9px;border:1px solid #CBD5E1;background:#fff;border-radius:12px;cursor:pointer;font-size:11px;font-weight:600}
+.scd-store-chip.off{background:#F1F5F9;color:#94A3B8;text-decoration:line-through;border-color:#E2E8F0}
+.scd-table .scd-th{cursor:pointer;user-select:none}
+.scd-table .scd-th:hover{background:#E2E8F0!important}
+
 </style>
 
 </head>
@@ -462,6 +491,16 @@ tr:hover td{background:#f8f9fb}
 
 </div>
 
+<!-- 일자별 매장별 대분류 -->
+
+<div class="card">
+
+  <h2>일자별 매장별 대분류 <span style="font-size:12px;color:#94A3B8;font-weight:400">(일 단위 · 매출/수량 전환, 원·건 전체 자리)</span></h2>
+
+  <div id="store-cat-daily"></div>
+
+</div>
+
 <!-- 대분류 > 중분류 > 소분류 드릴다운 -->
 
 <div class="card">
@@ -473,30 +512,6 @@ tr:hover td{background:#f8f9fb}
     <table id="tbl-cat"></table>
 
   </div>
-
-</div>
-
-<!-- 매장별 TOP 메뉴 -->
-
-<div class="card">
-
-  <h2>매장별 메뉴 전체</h2>
-
-  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-
-    <div style="display:flex;gap:6px" id="top-cat-filters"></div>
-
-    <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
-
-      <div class="fbtn active" id="top-excl-btn" onclick="toggleTopExclude()" style="padding:4px 12px;font-size:11px">상위 이상치 제외</div>
-
-      <div id="top-sort-btns" style="display:flex;gap:6px"></div>
-
-    </div>
-
-  </div>
-
-  <div class="grid3" id="store-tops"></div>
 
 </div>
 
@@ -2490,8 +2505,176 @@ function update() {
 
   updateCatTable();
 
-  updateStoreTops();
+  renderStoreCatDaily();
 
+}
+
+// ============================================================
+// 일자별 매장별 대분류 매출 (운영 대시보드 표 디자인 이식)
+// ============================================================
+let SCD_HIDDEN = new Set();
+let SCD_HEAT = false;
+let SCD_MODE = 'net';   // 'net'=매출(만원), 'qty'=수량(건)
+let _scdCache = { key:null, rows:null };  // 일별 집계 캐시 (기간 바뀔 때만 재fetch)
+
+// 현재 선택 기간의 일별 파일을 읽어 {date, store, big, net} 행으로 정규화
+async function scdLoadDaily(){
+  let dates=[];
+  if (LOAD_MODE==='daily' && LOADED_DATES.length){
+    dates=[...LOADED_DATES];
+  } else {
+    for (const m of LOADED_MONTHS){
+      const yy='20'+m.file.slice(0,2), mm=m.file.slice(2,4);
+      const dim=new Date(+yy,+mm,0).getDate();
+      for(let d=1; d<=dim; d++) dates.push(`${yy}-${mm}-${String(d).padStart(2,'0')}`);
+    }
+  }
+  const key = dates.join(',');
+  if (_scdCache.key===key && _scdCache.rows) return _scdCache.rows;
+  const DAILY_BASE = DATA_BASE_URL + 'daily/';
+  const fetched = await Promise.all(dates.map(async dt => {
+    const fname = dt.slice(2,4)+dt.slice(5,7)+dt.slice(8,10)+'.json';
+    try { const r = await fetch(DAILY_BASE + fname, dt===_kstToday()?{cache:'no-store'}:undefined); if(!r.ok) return null; return {date:dt, data:await r.json()}; }
+    catch { return null; }
+  }));
+  const normStore = s => s.endsWith('점') ? s.slice(0,-1) : s;
+  const rows=[];
+  fetched.forEach(res => {
+    if(!res || !res.data || !res.data.stores) return;
+    for(const [store, items] of Object.entries(res.data.stores)){
+      const ns=normStore(store);
+      for(const it of (items||[])){
+        const name=(it.item||'').trim(); if(!name) continue;
+        const norm=normalizeCategory(name, {cat_big:it.cat_big, cat_mid:it.cat_mid, cat_small:it.cat_small});
+        rows.push({ date:res.date, store:ns, big:groupBig(norm.cat_big||'기타'), net:it.net||0, qty:it.qty||0 });
+      }
+    }
+  });
+  _scdCache={key, rows};
+  return rows;
+}
+
+const SCD_BIGCOLS = ['음료','베이커리','푸드','MD/기타'];
+const SCD_LABEL = { '음료':'음료','베이커리':'베이커리','푸드':'푸드','MD/기타':'MD' };
+const SCD_STORE_COLOR = {'다산':'#0984e3','가산':'#00b894','광주':'#fdcb6e','하남':'#a29bfe','수원':'#fd79a8','운정':'#55efc4'};
+function scdColor(s){ return SCD_STORE_COLOR[s] || SCD_STORE_COLOR[(s||'').replace(/점.*$/,'')] || '#475569'; }
+const scdVal = v => (v && v>0) ? v.toLocaleString() : '-';   // 원/건 전체 자리(일의 자리까지)
+const SCD_DOW = ['일','월','화','수','목','금','토'];
+
+function scdToggleStore(s){ if(SCD_HIDDEN.has(s)) SCD_HIDDEN.delete(s); else SCD_HIDDEN.add(s); renderStoreCatDaily(); }
+function scdToggleHeat(){ SCD_HEAT=!SCD_HEAT; renderStoreCatDaily(); }
+function scdSetMode(m){ SCD_MODE=m; renderStoreCatDaily(); }
+
+function scdCtrl(stores){
+  const chip = s => `<span class="scd-store-chip ${SCD_HIDDEN.has(s)?'off':''}" style="${SCD_HIDDEN.has(s)?'':'color:'+scdColor(s)+';border-color:'+scdColor(s)+'66'}" onclick="scdToggleStore('${s}')">${s}</span>`;
+  return `<div class="scd-ctrl">
+    <span class="scd-ctrl-label">표시</span>
+    <button class="scd-mode-btn ${SCD_MODE==='net'?'active':''}" onclick="scdSetMode('net')">매출(원)</button>
+    <button class="scd-mode-btn ${SCD_MODE==='qty'?'active':''}" onclick="scdSetMode('qty')">수량(건)</button>
+    <span class="scd-ctrl-label" style="margin-left:8px">히트맵</span>
+    <button class="scd-heat-btn ${SCD_HEAT?'on':''}" onclick="scdToggleHeat()">${SCD_HEAT?'ON':'OFF'}</button>
+    <div class="scd-store-chips">${stores.map(chip).join('')}</div>
+  </div>`;
+}
+
+async function renderStoreCatDaily(){
+  const el = document.getElementById('store-cat-daily');
+  if(!el) return;
+
+  // 데이터 소스: 일별모드 RAW엔 date 있음 → 그대로, 월간모드면 일별 파일 fetch
+  let rows;
+  if (RAW.length && RAW[0] && RAW[0].date){
+    rows = RAW.map(r=>({ date:r.date, store:r.store, big:groupBig(r.cat_big), net:r.net, qty:r.qty }));
+  } else {
+    if (!el.querySelector('.scd-table')) el.innerHTML = '<div style="color:#94A3B8;padding:12px">불러오는 중…</div>';
+    rows = await scdLoadDaily();
+  }
+
+  const allStores = selStores.size===0 ? STORES.filter(s=>s!=='전체') : [...selStores];
+  const data = rows.filter(r=>allStores.includes(r.store));
+
+  // 매장별 존재 카테고리 (있는곳만, BIG_ORDER 순서)
+  const storeCats = {};
+  allStores.forEach(s=>{
+    const present = new Set(data.filter(r=>r.store===s).map(r=>r.big));
+    storeCats[s] = SCD_BIGCOLS.filter(b=>present.has(b));
+  });
+  const stores = allStores.filter(s => storeCats[s].length>0);   // 데이터 있는 매장만
+  const visStores = stores.filter(s => !SCD_HIDDEN.has(s));       // 숨김 제외
+
+  const dates = [...new Set(data.map(r=>r.date))].filter(Boolean).sort();
+
+  // 집계 agg[date][store][big] = net 합
+  const agg = {};
+  data.forEach(r=>{
+    (agg[r.date]=agg[r.date]||{});
+    (agg[r.date][r.store]=agg[r.date][r.store]||{});
+    agg[r.date][r.store][r.big]=(agg[r.date][r.store][r.big]||0)+(SCD_MODE==='qty'?(r.qty||0):(r.net||0));
+  });
+
+  if(!dates.length || !visStores.length){
+    el.innerHTML = scdCtrl(stores) + '<div style="color:#94A3B8;padding:12px">데이터 없음 (기간을 선택하거나 일 단위 조회를 사용하세요)</div>';
+    return;
+  }
+
+  // 히트맵 정규화: 카테고리 셀 최대값
+  const cellMax = {};
+  visStores.forEach(s=>storeCats[s].forEach(b=>{
+    let mx=0; dates.forEach(dt=>{ const v=(agg[dt]&&agg[dt][s]&&agg[dt][s][b])||0; if(v>mx)mx=v; });
+    cellMax[s+'|'+b]=mx;
+  }));
+
+  // 헤더 (2줄: 매장 / 대분류+소계)
+  let th1 = '<th class="scd-th" rowspan="2">날짜</th><th class="scd-th" rowspan="2">요일</th>';
+  visStores.forEach(s=>{
+    const span = storeCats[s].length + 1;
+    th1 += `<th class="scd-th scd-storeend" colspan="${span}" style="color:${scdColor(s)}" onclick="scdToggleStore('${s}')" title="클릭해서 숨김">${s}</th>`;
+  });
+  th1 += '<th class="scd-th" rowspan="2">합계</th>';
+  let th2 = '';
+  visStores.forEach(s=>{
+    storeCats[s].forEach(b=>{ th2 += `<th class="scd-sub" style="color:${BIG_COLORS[b]||'#64748B'}">${SCD_LABEL[b]}</th>`; });
+    th2 += '<th class="scd-sub scd-storeend" style="color:#334155">소계</th>';
+  });
+
+  // 본문 (일자별)
+  let bodyHtml='';
+  const colTot = {};
+  dates.forEach(dt=>{
+    const d = new Date(dt); const dow = SCD_DOW[d.getDay()]; const wknd = d.getDay()===0||d.getDay()===6;
+    let cells=''; let rowGrand=0;
+    visStores.forEach(s=>{
+      let storeSub=0;
+      storeCats[s].forEach(b=>{
+        const v=(agg[dt]&&agg[dt][s]&&agg[dt][s][b])||0; storeSub+=v;
+        colTot[s+'|'+b]=(colTot[s+'|'+b]||0)+v;
+        const mx=cellMax[s+'|'+b]||0;
+        const heat = (SCD_HEAT && v>0 && mx>0) ? `background:rgba(14,165,233,${(v/mx*0.28).toFixed(3)})` : '';
+        cells += `<td class="scd-td" style="${heat}">${scdVal(v)}</td>`;
+      });
+      colTot[s+'|소계']=(colTot[s+'|소계']||0)+storeSub;
+      rowGrand+=storeSub;
+      cells += `<td class="scd-td scd-sub-td scd-storeend">${scdVal(storeSub)}</td>`;
+    });
+    colTot['grand']=(colTot['grand']||0)+rowGrand;
+    bodyHtml += `<tr class="${wknd?'scd-wknd':''}"><td class="scd-date">${dt.slice(5)}</td><td class="scd-dow">${dow}</td>${cells}<td class="scd-td scd-total">${scdVal(rowGrand)}</td></tr>`;
+  });
+
+  // 합계행
+  let foot='';
+  visStores.forEach(s=>{
+    storeCats[s].forEach(b=>{ foot += `<td class="scd-td scd-total">${scdVal(colTot[s+'|'+b]||0)}</td>`; });
+    foot += `<td class="scd-td scd-total scd-storeend">${scdVal(colTot[s+'|소계']||0)}</td>`;
+  });
+
+  el.innerHTML = scdCtrl(stores) + `
+    <div class="scd-scroll">
+      <table class="scd-table">
+        <thead><tr>${th1}</tr><tr>${th2}</tr></thead>
+        <tbody>${bodyHtml}</tbody>
+        <tfoot><tr><td class="scd-date scd-total" colspan="2">합계</td>${foot}<td class="scd-td scd-total">${scdVal(colTot['grand']||0)}</td></tr></tfoot>
+      </table>
+    </div>`;
 }
 
 update();
@@ -2506,7 +2689,7 @@ async function loadManifest() {
 
   try {
 
-    const res = await fetch(DATA_BASE_URL + 'manifest.json');
+    const res = await fetch(DATA_BASE_URL + 'manifest.json', { cache: 'no-store' });
 
     if (res.ok) {
 
@@ -2634,11 +2817,13 @@ async function loadRange(fromFile, toFile) {
 
     const months = AVAILABLE_MONTHS.slice(Math.min(fi,ti), Math.max(fi,ti)+1);
 
-    // Fetch all months in range
+    // Fetch all months in range (현재월 파일은 매일 갱신되므로 캐시 안 함)
+
+    const _curMonthFile = _kstToday().slice(2,7).replace('-','') + '.json';
 
     const results = await Promise.all(months.map(m =>
 
-      fetch(DATA_BASE_URL + m.file).then(r => { if(!r.ok) throw new Error(m.file+' HTTP '+r.status); return r.json(); })
+      fetch(DATA_BASE_URL + m.file, m.file===_curMonthFile ? {cache:'no-store'} : undefined).then(r => { if(!r.ok) throw new Error(m.file+' HTTP '+r.status); return r.json(); })
 
     ));
 
