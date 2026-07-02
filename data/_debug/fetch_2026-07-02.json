@@ -1,17 +1,9 @@
 [
   {
     "date": "2026-07-02",
-    "code": "V68581",
-    "loc": "수원",
-    "rows": 0,
-    "sample_keys": [],
-    "sample_prod": ""
-  },
-  {
-    "date": "2026-07-02",
     "code": "V70577",
     "loc": "광주",
-    "rows": 56,
+    "rows": 60,
     "sample_keys": [
       "SALE_QTY",
       "TOT_DC_AMT",
